@@ -1,0 +1,52 @@
+{
+  "version": "0.2.1",
+  "versionCode": 3,
+  "scope": "ANDROID_SERVICE_RECOVERY_HOTFIX",
+  "build": "PASS_DEBUG_AND_UNSIGNED_RELEASE",
+  "tests": [
+    {
+      "name": "id.ars.hey.ServiceLifecycleTest",
+      "tests": "6",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "id.ars.hey.BrowserVerifierTest",
+      "tests": "7",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "lintSummary": "0 errors, 6 warnings",
+  "signature": "PASS_V2",
+  "certificateSha256": "0dd325106ffd507f33daa4d46afdb05ccf120cf52a81add23f522bf4b22562d2",
+  "sameCertificateAsSupplied020": true,
+  "zipAlignment": "PASS_P16_CHECK_NOT_NATIVE_OR_DEVICE_CERTIFICATION",
+  "artifacts": [
+    {
+      "name": "hey-android-0.2.1.apk",
+      "bytes": 8813557,
+      "sha256": "0ff4ff2f380fbcbcad17ac7a48e6f3714ea9c4db5744a608ea8746076db0ade9"
+    },
+    {
+      "name": "hey-android-0.2.1-release-unsigned.apk",
+      "bytes": 7390604,
+      "sha256": "5e30b6e4bb6c779f9f26050681c466265b6b1850c290cf684def237965e3dd8f"
+    }
+  ],
+  "gateway": {
+    "version": "0.2.0",
+    "regressionsPassed": 28,
+    "syntax": "PASS",
+    "redeployed": false
+  },
+  "observedPreRepair": "OFFLINE_SERVICE_STOPPED_EXISTING_REMOTE_PAIRING_RECORD",
+  "installedVersionPreRepair": "NOT_CONFIRMED_NO_APP_VERSION_IN_LAST_HEARTBEAT",
+  "physicalServiceRetest": "RETEST_REQUIRED_AFTER_OWNER_INSTALLS",
+  "forceStopOrOemUnkillableGuarantee": false,
+  "wake": "BLOCKED_FIREBASE_CONFIGURATION",
+  "pairingProfileData": "NO_RESET_OR_DELETION; update over supplied 0.2.0 preserves app-owned data if installed with that certificate",
+  "original010Update": "BLOCKED_DIFFERENT_CERTIFICATE"
+}

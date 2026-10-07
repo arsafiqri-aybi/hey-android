@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="id.ars.hey.BrowserVerifierTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-07T12:57:25" hostname="2b2a989106b4" time="0.018">
+  <properties/>
+  <testcase name="hostnamePolicyRejectsTerminalDotLocalAndNumericHosts" classname="id.ars.hey.BrowserVerifierTest" time="0.003"/>
+  <testcase name="sensitiveFillReturnsOnlyAnEqualityPostcondition" classname="id.ars.hey.BrowserVerifierTest" time="0.003"/>
+  <testcase name="playRequiresBothUnpausedAndClockAdvancement" classname="id.ars.hey.BrowserVerifierTest" time="0.002"/>
+  <testcase name="navigationUsesRedactedCanonicalUrlWithoutExposingSecrets" classname="id.ars.hey.BrowserVerifierTest" time="0.004"/>
+  <testcase name="tabVerificationUsesIdentityAndCommittedPage" classname="id.ars.hey.BrowserVerifierTest" time="0.001"/>
+  <testcase name="reloadNeedsAnActualDocumentLifecycle" classname="id.ars.hey.BrowserVerifierTest" time="0.001"/>
+  <testcase name="scrollRequiresObservedMovement" classname="id.ars.hey.BrowserVerifierTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

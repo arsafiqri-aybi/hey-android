@@ -1,0 +1,47 @@
+/workspace/scratch/1cb0baec6fa6/hey-android/app/src/main/java/id/ars/hey/SecureStore.java:37: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+  synchronized void remove(String name){prefs.edit().remove(name).commit();}
+                                                                  ~~~~~~~~
+
+   Explanation for issues of type "ApplySharedPref":
+   Consider using apply() instead of commit on shared preferences. Whereas
+   commit blocks and writes its data to persistent storage immediately, apply
+   will handle it in the background.
+
+/workspace/scratch/1cb0baec6fa6/hey-android/app/src/main/java/id/ars/hey/BrowserRuntime.java:69: Warning: Using setJavaScriptEnabled can introduce XSS vulnerabilities into your application, review carefully [SetJavaScriptEnabled]
+    String tab=UUID.randomUUID().toString();MutableContextWrapper wrapper=new MutableContextWrapper(presentation.getContext());WebView view=new ControlledWebView(wrapper);contexts.put(view,wrapper);WebSettings s=view.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setMediaPlaybackRequiresUserGesture(true);s.setSupportMultipleWindows(true);s.setJavaScriptCanOpenWindowsAutomatically(false);s.setSafeBrowsingEnabled(true);s.setBuiltInZoomControls(false);
+                                                                                                                                                                                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "SetJavaScriptEnabled":
+   Your code should not invoke setJavaScriptEnabled if you are not sure that
+   your app really requires JavaScript support.
+
+   https://goo.gle/SetJavaScriptEnabled
+   https://developer.android.com/training/articles/security-tips
+
+/workspace/scratch/1cb0baec6fa6/hey-android/app/src/main/java/id/ars/hey/MainActivity.java:55: Warning: String literal in setText can not be translated. Use Android resources instead. [SetTextI18n]
+  private void updateTasks(){if(taskTitle==null)return;JSONObject state=app.state.snapshot();if(!state.optString("taskId").isEmpty()){taskTitle.setText("Sedang bekerja");taskDetail.setText("Progress diamati langsung dari browser.");JSONObject p=state.optJSONObject("progress");taskTime.setText(p!=null&&p.has("currentTime")?String.format(java.util.Locale.US,"%.1f detik",p.optDouble("currentTime",0)):"");taskCounts.setText(p!=null&&p.has("frames")?p.optInt("frames")+" frame · "+p.optInt("audioChunks")+" segmen audio":"");}else{try{JSONObject last=new JSONObject(app.secure.get("lastTask","{}"));taskTitle.setText(last.has("status")?last.optString("status"):"Belum ada aktivitas");taskDetail.setText(last.optBoolean("verified")?"Hasil task terverifikasi.":"Hasil terverifikasi akan muncul setelah ada bukti yang sesuai.");taskTime.setText("");taskCounts.setText("");}catch(Exception ignored){}}}
+                                                                                                                                                        ~~~~~~~~~~~~~~~~
+/workspace/scratch/1cb0baec6fa6/hey-android/app/src/main/java/id/ars/hey/MainActivity.java:55: Warning: String literal in setText can not be translated. Use Android resources instead. [SetTextI18n]
+  private void updateTasks(){if(taskTitle==null)return;JSONObject state=app.state.snapshot();if(!state.optString("taskId").isEmpty()){taskTitle.setText("Sedang bekerja");taskDetail.setText("Progress diamati langsung dari browser.");JSONObject p=state.optJSONObject("progress");taskTime.setText(p!=null&&p.has("currentTime")?String.format(java.util.Locale.US,"%.1f detik",p.optDouble("currentTime",0)):"");taskCounts.setText(p!=null&&p.has("frames")?p.optInt("frames")+" frame · "+p.optInt("audioChunks")+" segmen audio":"");}else{try{JSONObject last=new JSONObject(app.secure.get("lastTask","{}"));taskTitle.setText(last.has("status")?last.optString("status"):"Belum ada aktivitas");taskDetail.setText(last.optBoolean("verified")?"Hasil task terverifikasi.":"Hasil terverifikasi akan muncul setelah ada bukti yang sesuai.");taskTime.setText("");taskCounts.setText("");}catch(Exception ignored){}}}
+                                                                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/workspace/scratch/1cb0baec6fa6/hey-android/app/src/main/java/id/ars/hey/MainActivity.java:83: Warning: Do not concatenate text displayed with setText. Use resource string with placeholders. [SetTextI18n]
+    if(runtimeDetail!=null){String reason=s.optString("runtimeReason");if(reason.isEmpty()&&!s.optString("connection").equals("ONLINE"))reason=s.optString("reason");String status=!paired?"Pairing belum tersimpan di aplikasi ini.":paused?"Hey dijeda olehmu.":s.optString("runtime").equals("RUNNING")?"Service aktif · koneksi "+s.optString("connection"):s.optString("runtime").equals("STARTING")?"Service sedang dimulai…":"Service belum aktif"+(reason.isEmpty()?".":" · "+reason);runtimeDetail.setText("Hey "+BuildConfig.VERSION_NAME+" · "+status+(s.optString("runtime").equals("RUNNING")&&!reason.isEmpty()?" · "+reason:""));}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/workspace/scratch/1cb0baec6fa6/hey-android/app/src/main/java/id/ars/hey/MainActivity.java:83: Warning: String literal in setText can not be translated. Use Android resources instead. [SetTextI18n]
+    if(runtimeDetail!=null){String reason=s.optString("runtimeReason");if(reason.isEmpty()&&!s.optString("connection").equals("ONLINE"))reason=s.optString("reason");String status=!paired?"Pairing belum tersimpan di aplikasi ini.":paused?"Hey dijeda olehmu.":s.optString("runtime").equals("RUNNING")?"Service aktif · koneksi "+s.optString("connection"):s.optString("runtime").equals("STARTING")?"Service sedang dimulai…":"Service belum aktif"+(reason.isEmpty()?".":" · "+reason);runtimeDetail.setText("Hey "+BuildConfig.VERSION_NAME+" · "+status+(s.optString("runtime").equals("RUNNING")&&!reason.isEmpty()?" · "+reason:""));}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ~~~~~~
+
+   Explanation for issues of type "SetTextI18n":
+   When calling TextView#setText
+   * Never call Number#toString() to format numbers; it will not handle
+   fraction separators and locale-specific digits properly. Consider using
+   String#format with proper format specifications (%d or %f) instead.
+   * Do not pass a string literal (e.g. "Hello") to display text. Hardcoded
+   text can not be properly translated to other languages. Consider using
+   Android resource strings instead.
+   * Do not build messages by concatenating text chunks. Such messages can not
+   be properly translated.
+
+   https://developer.android.com/guide/topics/resources/localization.html
+
+0 errors, 6 warnings
