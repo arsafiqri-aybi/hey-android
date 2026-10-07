@@ -17,5 +17,6 @@
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Owner-authorized private browser tasks and live browser observation on an app-owned virtual display"/>
     </service>
     <service android:name=".WakeService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT"/></intent-filter></service>
+    <receiver android:name=".PauseReceiver" android:exported="false"/>
   </application>
 </manifest>

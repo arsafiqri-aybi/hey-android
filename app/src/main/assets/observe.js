@@ -10,6 +10,8 @@
     elements.push({ref,tag:el.tagName.toLowerCase(),role:el.getAttribute('role'),label:(el.getAttribute('aria-label')||el.innerText||el.placeholder||el.name||'').slice(0,160),type:el.type||null,sensitive,disabled:!!el.disabled,rect:{x:r.x,y:r.y,width:r.width,height:r.height}});
   }
   window[HEY_NAMESPACE]={refs};
+  const focusedElement=Object.keys(refs).find(key=>refs[key]===document.activeElement)||document.activeElement?.tagName?.toLowerCase()||'';
   const media=[...document.querySelectorAll('video,audio')].slice(0,8).map((e,index)=>({index,type:e.tagName.toLowerCase(),currentTime:e.currentTime,duration:Number.isFinite(e.duration)?e.duration:null,paused:e.paused,ended:e.ended,muted:e.muted,readyState:e.readyState,playbackRate:e.playbackRate}));
-  return JSON.stringify({url:publicLocation(),title:document.title,text:(document.body?.innerText||'').slice(0,12000),viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY},elements,media,documentReady:document.readyState,contentAuthority:'untrusted-webpage'});
+  return JSON.stringify({url:publicLocation(),title:document.title,text:(document.body?.innerText||'').slice(0,12000),viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY},elements,media,focusedElement,documentReady:document.readyState,contentAuthority:'untrusted-webpage'});
 })()
+

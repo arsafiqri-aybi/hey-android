@@ -20,9 +20,16 @@ final class SecureStore {
     return (SecretKey)s.getKey(alias,null);
   }
   synchronized void put(String name,String value) throws Exception {
+    String payload=encrypt(value);
+    if(!prefs.edit().putString(name,payload).commit())throw new IllegalStateException("SECURE_PERSIST_FAILED");
+  }
+  synchronized String encrypt(String value)throws Exception{
     Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.ENCRYPT_MODE,key());byte[] iv=c.getIV(),data=c.doFinal(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     String payload=Base64.encodeToString(iv,Base64.NO_WRAP)+":"+Base64.encodeToString(data,Base64.NO_WRAP);
-    if(!prefs.edit().putString(name,payload).commit())throw new IllegalStateException("SECURE_PERSIST_FAILED");
+    return payload;
+  }
+  synchronized String decrypt(String payload)throws Exception{
+    String[] parts=payload.split(":",2);Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(parts[0],Base64.NO_WRAP)));return new String(c.doFinal(Base64.decode(parts[1],Base64.NO_WRAP)),java.nio.charset.StandardCharsets.UTF_8);
   }
   synchronized String get(String name,String fallback){
     try{String p=prefs.getString(name,null);if(p==null)return fallback;String[] parts=p.split(":",2);Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(parts[0],Base64.NO_WRAP)));return new String(c.doFinal(Base64.decode(parts[1],Base64.NO_WRAP)),java.nio.charset.StandardCharsets.UTF_8);}catch(Exception e){return fallback;}
