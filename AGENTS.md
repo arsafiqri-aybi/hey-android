@@ -1,0 +1,2 @@
+# Hey by Ars Android
+New private source; do not alter earlier operator apps. Browser, UI, notification and transport share one StateStore. Credentials stay in Android Keystore-backed storage; never expose a native JavaScript interface to websites. Browsing runs on an app-owned display. Disconnection, process death and unverified observation are explicit states. Build and inspect the APK. Device behavior is NOT_RUN until an actual device test supplies evidence. Keep background/wake/audio completion gates open until proven.

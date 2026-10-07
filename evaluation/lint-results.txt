@@ -1,0 +1,52 @@
+app/src/main/java/id/ars/hey/SecureStore.java:30: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+  synchronized void remove(String name){prefs.edit().remove(name).commit();}
+                                                                  ~~~~~~~~
+
+   Explanation for issues of type "ApplySharedPref":
+   Consider using apply() instead of commit on shared preferences. Whereas
+   commit blocks and writes its data to persistent storage immediately, apply
+   will handle it in the background.
+
+app/src/main/java/id/ars/hey/BrowserRuntime.java:56: Warning: Using setJavaScriptEnabled can introduce XSS vulnerabilities into your application, review carefully [SetJavaScriptEnabled]
+    String tab=UUID.randomUUID().toString();WebView view=new WebView(presentation.getContext());WebSettings s=view.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setMediaPlaybackRequiresUserGesture(true);s.setSupportMultipleWindows(true);s.setJavaScriptCanOpenWindowsAutomatically(false);s.setSafeBrowsingEnabled(true);s.setBuiltInZoomControls(false);
+                                                                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "SetJavaScriptEnabled":
+   Your code should not invoke setJavaScriptEnabled if you are not sure that
+   your app really requires JavaScript support.
+
+   https://goo.gle/SetJavaScriptEnabled
+   https://developer.android.com/training/articles/security-tips
+
+app/src/main/java/id/ars/hey/MainActivity.java:45: Warning: Custom view `ImageView` has setOnTouchListener called on it but does not override performClick [ClickableViewAccessibility]
+    browserImage.setOnTouchListener((v,e)->{HeyService service=HeyService.current;if(service==null||service.browser==null||!app.state.snapshot().optString("control").equals("HUMAN"))return false;float w=v.getWidth(),h=v.getHeight(),scale=Math.min(w/720f,h/1280f),left=(w-720*scale)/2,top=(h-1280*scale)/2;float x=(e.getX()-left)/scale,y=(e.getY()-top)/scale;if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;return true;}if(e.getAction()==MotionEvent.ACTION_UP){service.browser.manualTouch(downX,downY,x,y);v.performClick();return true;}return true;});
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "ClickableViewAccessibility":
+   If a View that overrides onTouchEvent or uses an OnTouchListener does not
+   also implement performClick and call it when clicks are detected, the View
+   may not handle accessibility actions properly. Logic handling the click
+   actions should ideally be placed in View#performClick as some accessibility
+   services invoke performClick when a click action should occur.
+
+app/src/main/java/id/ars/hey/MainActivity.java:51: Warning: String literal in setText can not be translated. Use Android resources instead. [SetTextI18n]
+  private void updateTasks(){if(taskTitle==null)return;JSONObject state=app.state.snapshot();if(!state.optString("taskId").isEmpty()){taskTitle.setText("Sedang bekerja");taskDetail.setText("Progress diamati langsung dari browser.");JSONObject p=state.optJSONObject("progress");taskTime.setText(p!=null&&p.has("currentTime")?String.format(java.util.Locale.US,"%.1f detik",p.optDouble("currentTime",0)):"");taskCounts.setText(p!=null&&p.has("frames")?p.optInt("frames")+" frame · "+p.optInt("audioChunks")+" segmen audio":"");}else{try{JSONObject last=new JSONObject(app.secure.get("lastTask","{}"));taskTitle.setText(last.has("status")?last.optString("status"):"Belum ada aktivitas");taskDetail.setText(last.optBoolean("verified")?"Hasil task terverifikasi.":"Hasil terverifikasi akan muncul setelah ada bukti yang sesuai.");taskTime.setText("");taskCounts.setText("");}catch(Exception ignored){}}}
+                                                                                                                                                        ~~~~~~~~~~~~~~~~
+app/src/main/java/id/ars/hey/MainActivity.java:51: Warning: String literal in setText can not be translated. Use Android resources instead. [SetTextI18n]
+  private void updateTasks(){if(taskTitle==null)return;JSONObject state=app.state.snapshot();if(!state.optString("taskId").isEmpty()){taskTitle.setText("Sedang bekerja");taskDetail.setText("Progress diamati langsung dari browser.");JSONObject p=state.optJSONObject("progress");taskTime.setText(p!=null&&p.has("currentTime")?String.format(java.util.Locale.US,"%.1f detik",p.optDouble("currentTime",0)):"");taskCounts.setText(p!=null&&p.has("frames")?p.optInt("frames")+" frame · "+p.optInt("audioChunks")+" segmen audio":"");}else{try{JSONObject last=new JSONObject(app.secure.get("lastTask","{}"));taskTitle.setText(last.has("status")?last.optString("status"):"Belum ada aktivitas");taskDetail.setText(last.optBoolean("verified")?"Hasil task terverifikasi.":"Hasil terverifikasi akan muncul setelah ada bukti yang sesuai.");taskTime.setText("");taskCounts.setText("");}catch(Exception ignored){}}}
+                                                                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "SetTextI18n":
+   When calling TextView#setText
+   * Never call Number#toString() to format numbers; it will not handle
+   fraction separators and locale-specific digits properly. Consider using
+   String#format with proper format specifications (%d or %f) instead.
+   * Do not pass a string literal (e.g. "Hello") to display text. Hardcoded
+   text can not be properly translated to other languages. Consider using
+   Android resource strings instead.
+   * Do not build messages by concatenating text chunks. Such messages can not
+   be properly translated.
+
+   https://developer.android.com/guide/topics/resources/localization.html
+
+0 errors, 5 warnings

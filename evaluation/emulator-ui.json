@@ -1,0 +1,5 @@
+{
+  "scope": "Local API 31 emulator startup/UI only; not a Vivo or background/audio/wake proof.",
+  "status": "BLOCKED_HOST_RUNTIME",
+  "reason": "EMULATOR_PROCESS_EXITED"
+}

@@ -1,0 +1,26 @@
+{
+  "artifact": "hey-android-0.1.0-debug.apk",
+  "sha256": "af8be434116a5eff788265fa114b3599d822c5f10d7f66a9d1a98ad7d1d58a2c",
+  "sizeBytes": 8921716,
+  "package": "id.ars.hey",
+  "version": "0.1.0",
+  "minApi": 31,
+  "targetApi": 35,
+  "build": "PASS",
+  "lint": {
+    "errors": 0,
+    "warnings": 5
+  },
+  "signature": "Android debug RSA 2048, APK v2 VERIFIED",
+  "zipAlignment": "PASS_16KB_ZIP_PAGE_ALIGNMENT",
+  "physicalDevice": "NOT_RUN",
+  "emulatorUI": "BLOCKED_HOST_RUNTIME",
+  "productionSigning": "NOT_RUN",
+  "toolchain": {
+    "jdk": "Temurin 17.0.20.1+1",
+    "gradle": "8.11.1",
+    "agp": "8.9.2",
+    "sdk": "35",
+    "firebaseMessaging": "25.1.3"
+  }
+}

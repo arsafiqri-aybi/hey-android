@@ -1,0 +1,21 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <application android:name=".HeyApp" android:label="Hey" android:icon="@drawable/ic_hey" android:theme="@style/HeyTheme" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false" android:allowAudioPlaybackCapture="true" android:supportsRtl="true">
+    <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false"/>
+    <meta-data android:name="firebase_analytics_collection_enabled" android:value="false"/>
+    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+      <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="hey" android:host="pair"/></intent-filter>
+    </activity>
+    <service android:name=".HeyService" android:exported="false" android:foregroundServiceType="specialUse|mediaProjection">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Owner-authorized private browser tasks and live browser observation on an app-owned virtual display"/>
+    </service>
+    <service android:name=".WakeService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT"/></intent-filter></service>
+  </application>
+</manifest>
