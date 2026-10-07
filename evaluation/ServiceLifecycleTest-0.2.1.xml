@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="id.ars.hey.ServiceLifecycleTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-07T12:57:25" hostname="2b2a989106b4" time="0.022">
+<testsuite name="id.ars.hey.ServiceLifecycleTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-07T13:03:56" hostname="2b2a989106b4" time="0.003">
   <properties/>
-  <testcase name="earlierPauseCannotKillALaterPause" classname="id.ars.hey.ServiceLifecycleTest" time="0.019"/>
-  <testcase name="automaticRetriesAreSpacedAndBounded" classname="id.ars.hey.ServiceLifecycleTest" time="0.002"/>
-  <testcase name="destroyedInstanceCannotCompleteOldPause" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
+  <testcase name="earlierPauseCannotKillALaterPause" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
+  <testcase name="automaticRetriesAreSpacedAndBounded" classname="id.ars.hey.ServiceLifecycleTest" time="0.001"/>
+  <testcase name="destroyedInstanceCannotCompleteOldPause" classname="id.ars.hey.ServiceLifecycleTest" time="0.001"/>
   <testcase name="explicitResumeRecoversAfterRetriesAndIntentionalPause" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
   <testcase name="automaticStartupHonorsPairingAndOwnerPause" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
+  <testcase name="checkingAnAlreadyActiveServicePreservesCurrentPoll" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
+  <testcase name="stalePollResponseCannotDispatchAfterPauseOrResume" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
   <testcase name="delayedPauseCannotKillResumedService" classname="id.ars.hey.ServiceLifecycleTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

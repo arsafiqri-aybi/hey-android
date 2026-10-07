@@ -6,7 +6,7 @@
   "tests": [
     {
       "name": "id.ars.hey.ServiceLifecycleTest",
-      "tests": "6",
+      "tests": "8",
       "failures": "0",
       "errors": "0",
       "skipped": "0"
@@ -28,12 +28,12 @@
     {
       "name": "hey-android-0.2.1.apk",
       "bytes": 8813557,
-      "sha256": "0ff4ff2f380fbcbcad17ac7a48e6f3714ea9c4db5744a608ea8746076db0ade9"
+      "sha256": "3c6ebc35e5933b781db70422865d959c7b53562d594c5ea03412c137dcddb0a2"
     },
     {
       "name": "hey-android-0.2.1-release-unsigned.apk",
       "bytes": 7390604,
-      "sha256": "5e30b6e4bb6c779f9f26050681c466265b6b1850c290cf684def237965e3dd8f"
+      "sha256": "2b28ad0eca464aad009bca1c42e61ccc53a280ce184c8fc29cd720111fdd1388"
     }
   ],
   "gateway": {
@@ -48,5 +48,6 @@
   "forceStopOrOemUnkillableGuarantee": false,
   "wake": "BLOCKED_FIREBASE_CONFIGURATION",
   "pairingProfileData": "NO_RESET_OR_DELETION; update over supplied 0.2.0 preserves app-owned data if installed with that certificate",
-  "original010Update": "BLOCKED_DIFFERENT_CERTIFICATE"
+  "original010Update": "BLOCKED_DIFFERENT_CERTIFICATE",
+  "additionalRegression": "stale poll/cancel callbacks rejected across pause/resume; already-active connection check preserves the current poll"
 }

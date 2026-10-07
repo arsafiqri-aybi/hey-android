@@ -3,6 +3,12 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ServiceLifecycleTest {
+  @Test public void checkingAnAlreadyActiveServicePreservesCurrentPoll(){
+    ServiceLifecycle l=new ServiceLifecycle();l.resume();long request=l.ticket();l.resume();assertTrue(l.active(request));
+  }
+  @Test public void stalePollResponseCannotDispatchAfterPauseOrResume(){
+    ServiceLifecycle l=new ServiceLifecycle();l.resume();long old=l.ticket();assertTrue(l.active(old));l.pause();assertFalse(l.active(old));l.resume();assertFalse(l.active(old));assertTrue(l.active(l.ticket()));
+  }
   @Test public void delayedPauseCannotKillResumedService(){
     ServiceLifecycle l=new ServiceLifecycle();l.resume();long old=l.pause();assertTrue(l.shouldStop(old));l.resume();assertFalse(l.shouldStop(old));
   }
