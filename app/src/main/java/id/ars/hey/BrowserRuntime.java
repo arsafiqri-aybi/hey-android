@@ -198,7 +198,7 @@ final class BrowserRuntime implements AutoCloseable {
       try{
         switch(action){
           case "fill":String script="(()=>{let e=window["+JSONObject.quote(selected)+"];if(!e?.isConnected)return 'STALE_REFERENCE';if(e.disabled||e.readOnly)return 'NOT_EDITABLE';if(!(e instanceof HTMLTextAreaElement||e instanceof HTMLInputElement&&/^(text|email|password|tel|url|number|search)$/.test(e.type)))return 'NOT_EDITABLE';let proto=e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,setter=Object.getOwnPropertyDescriptor(proto,'value')?.set;if(!setter)return 'UNSUPPORTED_FILL';e.focus();setter.call(e,"+JSONObject.quote(p.getString("text"))+");e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value==="+JSONObject.quote(p.getString("text"))+"?'OK':'FILL_NOT_APPLIED'})()";
-            web().evaluateJavascript(script,v->{if(!"\"OK\"".equals(v)){callback.result(null,"FILL_NOT_APPLIED");return;}afterAction(p,before,true,callback);});return;
+            web().evaluateJavascript(script,v->{if(!"\"OK\"".equals(v)){callback.result(null,v.contains("NOT_EDITABLE")?"NOT_EDITABLE":v.contains("STALE_REFERENCE")?"STALE_REFERENCE":"FILL_NOT_APPLIED");return;}afterAction(p,before,true,callback);});return;
           case "click":long clickedAt=SystemClock.elapsedRealtime();waitForClick(epoch,SystemClock.elapsedRealtime()+3500,null,(rect,reason)->{
              if(reason!=null){callback.result(null,reason);return;}
              try{
