@@ -9,9 +9,15 @@
     const r=el.getBoundingClientRect(),sensitive=el.type==='password'||/password|one-time-code|cc-number|cc-csc/.test(el.autocomplete||'');
     elements.push({ref,tag:el.tagName.toLowerCase(),role:el.getAttribute('role'),label:(el.getAttribute('aria-label')||el.innerText||el.placeholder||el.name||'').slice(0,160),type:el.type||null,sensitive,disabled:!!el.disabled,rect:{x:r.x,y:r.y,width:r.width,height:r.height}});
   }
-  window[HEY_NAMESPACE]={refs};
+  window[HEY_NAMESPACE]={refs,nextRef:0};
   const focusedElement=Object.keys(refs).find(key=>refs[key]===document.activeElement)||document.activeElement?.tagName?.toLowerCase()||'';
   const media=[...document.querySelectorAll('video,audio')].slice(0,8).map((e,index)=>({index,type:e.tagName.toLowerCase(),currentTime:e.currentTime,duration:Number.isFinite(e.duration)?e.duration:null,paused:e.paused,ended:e.ended,muted:e.muted,readyState:e.readyState,playbackRate:e.playbackRate}));
-  return JSON.stringify({url:publicLocation(),title:document.title,text:(document.body?.innerText||'').slice(0,12000),viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY},elements,media,focusedElement,documentReady:document.readyState,contentAuthority:'untrusted-webpage'});
+  // Top-level window scroll is not enough: websites often scroll nested containers.
+  const scrollRegions=[...document.querySelectorAll('*')].filter(e=>{
+    if(e.scrollHeight<=e.clientHeight+2&&e.scrollWidth<=e.clientWidth+2)return false;
+    const s=getComputedStyle(e);
+    return /(auto|scroll)/.test(s.overflowX+' '+s.overflowY);
+  }).slice(0,48).map((e,i)=>({index:i,top:e.scrollTop,left:e.scrollLeft}));
+  return JSON.stringify({url:publicLocation(),title:document.title,text:(document.body?.innerText||'').slice(0,12000),viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY},scrollRegions,elements,media,focusedElement,documentReady:document.readyState,contentAuthority:'untrusted-webpage'});
 })()
 

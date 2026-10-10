@@ -7,11 +7,20 @@ final class BrowserVerifier {
   static JSONObject media(JSONObject o){JSONArray a=o.optJSONArray("media");return a==null?null:a.optJSONObject(0);}
   static boolean ready(JSONObject o){return "complete".equals(o.optString("documentReady"));}
   static boolean navigation(String expected,JSONObject o){return !UrlPolicy.redact(expected).isEmpty()&&UrlPolicy.redact(expected).equals(UrlPolicy.redact(o.optString("url")))&&ready(o);}
-  private static boolean moved(JSONObject before,JSONObject after){JSONObject a=before.optJSONObject("viewport"),b=after.optJSONObject("viewport");return a!=null&&b!=null&&(Math.abs(a.optDouble("scrollX")-b.optDouble("scrollX"))>.5||Math.abs(a.optDouble("scrollY")-b.optDouble("scrollY"))>.5);}
+  private static boolean moved(JSONObject before,JSONObject after){
+    JSONObject a=before.optJSONObject("viewport"),b=after.optJSONObject("viewport");
+    if(a!=null&&b!=null&&(Math.abs(a.optDouble("scrollX")-b.optDouble("scrollX"))>.5||Math.abs(a.optDouble("scrollY")-b.optDouble("scrollY"))>.5))return true;
+    JSONArray old=before.optJSONArray("scrollRegions"),next=after.optJSONArray("scrollRegions");
+    if(old==null||next==null||old.length()!=next.length())return false;
+    for(int i=0;i<old.length();i++){JSONObject x=old.optJSONObject(i),y=next.optJSONObject(i);if(x!=null&&y!=null&&(Math.abs(x.optDouble("top")-y.optDouble("top"))>.5||Math.abs(x.optDouble("left")-y.optDouble("left"))>.5))return true;}
+    return false;
+  }
   private static boolean hasTab(JSONObject o,String id){JSONArray a=o.optJSONArray("tabs");if(a!=null)for(int i=0;i<a.length();i++)if(id.equals(a.optJSONObject(i).optString("tabId")))return true;return false;}
   static boolean action(JSONObject p,JSONObject before,JSONObject after,boolean fillVerified){
     boolean navigation=!before.optString("url").equals(after.optString("url"))&&ready(after);
     boolean focus=!before.optString("focusedElement").equals(after.optString("focusedElement"));
+    // A visible DOM change verifies only a browser-side effect, not a business outcome.
+    boolean surfaceChange=!before.optString("text").equals(after.optString("text"))||!before.optString("title").equals(after.optString("title"));
     return switch(p.optString("action")){
       case "fill" -> fillVerified;
       case "scroll","drag" -> moved(before,after);
@@ -20,7 +29,7 @@ final class BrowserVerifier {
       case "tab_close" -> hasTab(before,p.optString("value"))&&!hasTab(after,p.optString("value"));
       case "back","forward" -> navigation||after.optLong("documentEpoch")>before.optLong("documentEpoch")&&ready(after);
       case "reload" -> after.optLong("documentEpoch")>before.optLong("documentEpoch")&&ready(after);
-      case "click","key" -> navigation||focus;
+      case "click","key" -> navigation||focus||surfaceChange;
       default -> false;
     };
   }

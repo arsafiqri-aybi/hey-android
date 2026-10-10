@@ -1,90 +1,626 @@
 package id.ars.hey;
+
 import android.Manifest;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.graphics.*;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.Insets;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.*;
-import android.provider.Settings;
 import android.view.*;
+import android.view.inputmethod.*;
 import android.widget.*;
-import org.json.*;
 import java.util.concurrent.Executors;
+import org.json.*;
 
+/** Owner-approved native chrome. BrowserRuntime owns the WebView, never the page renderer. */
 public final class MainActivity extends Activity implements StateStore.Listener {
-  private HeyApp app;private final Handler main=new Handler(Looper.getMainLooper());private final java.util.concurrent.ExecutorService network=Executors.newSingleThreadExecutor();
-  private final RuntimeStartPolicy startPolicy=new RuntimeStartPolicy();private boolean visible;private Button connectButton;private TextView runtimeDetail;
-  private LinearLayout root,content,nav;private TextView connection,detail,taskTitle,taskDetail,taskTime,taskCounts;private FrameLayout browserHost;private Button pauseButton;private TextView browserStatus,audioStatus;private Button audioButton;private String page="Home";private float downX,downY;
-  private final int ink=Color.rgb(35,42,37),muted=Color.rgb(108,117,108),green=Color.rgb(51,82,61),background=Color.rgb(243,242,239);
-  @Override public void onCreate(Bundle state){setTheme(R.style.HeyTheme);super.onCreate(state);app=(HeyApp)getApplication();app.state.listen(this);getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);build();pairIntent(getIntent());}
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);pairIntent(intent);}
-  private int dp(float v){return (int)(getResources().getDisplayMetrics().density*v+.5f);}
-  private GradientDrawable surface(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));d.setStroke(dp(1),Color.argb(18,40,58,45));return d;}
-  private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));t.setLineSpacing(dp(3),1);return t;}
-  private void space(LinearLayout target,int height){View v=new View(this);target.addView(v,new LinearLayout.LayoutParams(1,dp(height)));}
-  private Button button(String label,Runnable action,boolean primary){Button b=new MotionButton(this);b.setText(label);b.setAllCaps(false);b.setTextSize(15);b.setTextColor(primary?Color.WHITE:ink);b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(primary?0x30ffffff:0x1833523d),surface(primary?green:Color.rgb(236,239,233),15),null));b.setPadding(dp(12),dp(8),dp(12),dp(8));b.setOnClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);action.run();});LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,dp(54));params.topMargin=dp(12);b.setLayoutParams(params);return b;}
-  private static final class MotionButton extends Button {
-    MotionButton(Context context){super(context);}
-    @Override public void setPressed(boolean pressed){super.setPressed(pressed);if(Settings.Global.getFloat(getContext().getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1)>0)animate().scaleX(pressed?.985f:1).scaleY(pressed?.985f:1).setDuration(pressed?85:180).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();}
+  HeyApp app;
+  HeyUi ui;
+  private HeyShell shell;
+  private FrameLayout stage, browserHost;
+  LinearLayout content, browserPage;
+  private EditText address;
+  private TextView browserEmpty;
+  private final Handler main = new Handler(Looper.getMainLooper());
+  private final java.util.concurrent.ExecutorService network = Executors.newSingleThreadExecutor();
+  private final RuntimeStartPolicy startPolicy = new RuntimeStartPolicy();
+  private boolean visible;
+  private int page;
+  String expanded = "", taskSignature = "";
+  TextView homeStatus,
+      heroTitle,
+      heroDescription,
+      activity,
+      connectionState,
+      pairValue,
+      serviceValue,
+      browserValue;
+  ImageView connectionDot;
+  Button homeAction, serviceAction;
+  TextView audioStatus;
+  Button audioButton;
+  private UiState.Mode mode;
+
+  @Override
+  public void onCreate(Bundle state) {
+    setTheme(R.style.HeyTheme);
+    super.onCreate(state);
+    app = (HeyApp) getApplication();
+    ui = new HeyUi(this);
+    app.state.listen(this);
+    if (state != null) {
+      page = state.getInt("page", 0);
+      expanded = state.getString("expanded", "");
+    }
+    getWindow().setDecorFitsSystemWindows(false);
+    getWindow().setStatusBarColor(ui.canvas);
+    getWindow().setNavigationBarColor(ui.canvas);
+    getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    getWindow()
+        .getInsetsController()
+        .setSystemBarsAppearance(
+            0,
+            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+    build();
+    pairIntent(getIntent());
   }
-  private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(22),dp(22),dp(22),dp(22));c.setBackground(surface(Color.rgb(255,254,251),24));c.setElevation(dp(3));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(dp(1),dp(4),dp(1),dp(18));c.setLayoutParams(p);return c;}
-  private void build(){
-    root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(background);root.setPadding(dp(20),dp(18),dp(20),dp(12));setContentView(root);
-    root.setOnApplyWindowInsetsListener((v,insets)->{Insets i=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(dp(20)+i.left,dp(12)+i.top,dp(20)+i.right,dp(8)+i.bottom);return insets;});
-    LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);ImageView wordmark=new ImageView(this);wordmark.setImageResource(R.drawable.ic_hey);wordmark.setContentDescription("Hey.");header.addView(wordmark,new LinearLayout.LayoutParams(dp(44),dp(44)));TextView by=text("  by Ars",13,muted,false);header.addView(by);root.addView(header);space(root,16);
-    ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-    nav=new LinearLayout(this);nav.setPadding(dp(4),dp(4),dp(4),dp(4));nav.setBackground(surface(Color.rgb(230,233,226),20));root.addView(nav,new LinearLayout.LayoutParams(-1,dp(56)));render();
+
+  @Override
+  protected void onSaveInstanceState(Bundle s) {
+    s.putInt("page", page);
+    s.putString("expanded", expanded);
+    super.onSaveInstanceState(s);
   }
-  private void render(){HeyService service=HeyService.current;if(service!=null&&service.browser!=null)service.browser.detach(this);content.removeAllViews();connection=detail=taskTitle=taskDetail=taskTime=taskCounts=null;browserHost=null;browserStatus=null;pauseButton=null;audioStatus=null;audioButton=null;connectButton=null;runtimeDetail=null;nav.removeAllViews();for(String name:new String[]{"Home","Browser","Tasks","Settings"}){TextView tab=text(name,12,name.equals(page)?green:muted,name.equals(page));tab.setGravity(Gravity.CENTER);if(name.equals(page))tab.setBackground(surface(Color.WHITE,16));tab.setOnClickListener(v->{page=name;render();});nav.addView(tab,new LinearLayout.LayoutParams(0,-1,1));}
-    switch(page){case "Browser":browser();break;case "Tasks":tasks();break;case "Settings":settings();break;default:home();}
-    if(Settings.Global.getFloat(getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1)>0){content.setAlpha(.65f);content.setTranslationY(dp(5));content.animate().alpha(1).translationY(0).setDuration(220).start();}update();
+
+  @Override
+  protected void onNewIntent(Intent i) {
+    super.onNewIntent(i);
+    setIntent(i);
+    pairIntent(i);
   }
-  private void home(){space(content,22);content.addView(text("A little hello.",35,ink,true));content.addView(text("Ruang untuk browsermu.",18,muted,false));space(content,30);LinearLayout c=card();connection=text("Memeriksa…",18,green,true);c.addView(connection);detail=text("",14,muted,false);space(c,8);c.addView(detail);
-    connectButton=button("Jalankan Hey",this::connect,true);c.addView(connectButton);runtimeDetail=text("",12,muted,false);space(c,8);c.addView(runtimeDetail);content.addView(c);
-    LinearLayout control=card();control.addView(text("Tetap di tanganmu.",18,ink,true));space(control,8);control.addView(text("Lihat browser yang sedang bekerja, ambil alih kapan pun, atau jeda seluruh aktivitas.",14,muted,false));control.addView(button("Lihat browser",()->{page="Browser";render();},false));content.addView(control);
+
+  int dp(float n) {
+    return ui.dp(n);
   }
-  private void browser(){content.addView(text("Your browser.",29,ink,true));content.addView(text("Surface yang sama untuk kamu dan Hey.",14,muted,false));space(content,14);LinearLayout c=card();browserHost=new FrameLayout(this);browserHost.setBackground(surface(Color.rgb(237,240,233),16));browserHost.setContentDescription("Browser Hey");c.addView(browserHost,new LinearLayout.LayoutParams(-1,dp(420)));browserStatus=text("Menyiapkan browser…",13,muted,false);c.addView(browserStatus);connectButton=button("Jalankan Hey",this::connect,true);c.addView(connectButton);runtimeDetail=text("",12,muted,false);c.addView(runtimeDetail);attachBrowser();
-    c.addView(button(app.state.snapshot().optString("control").equals("HUMAN")?"Kembalikan ke Hey":"Ambil alih",()->{HeyService s=HeyService.current;if(s!=null){s.control(!app.state.snapshot().optString("control").equals("HUMAN"));render();}},true));
-    c.addView(button("Pilih file untuk halaman ini",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,40);},false));content.addView(c);
-    LinearLayout navigate=card();EditText url=new EditText(this);url.setSingleLine(true);url.setHint("https://…");url.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);navigate.addView(url);navigate.addView(button("Buka halaman",()->{HeyService s=HeyService.current;if(s==null||s.browser==null){startBrowser();return;}if(!app.state.snapshot().optString("control").equals("HUMAN")){Toast.makeText(this,"Ambil alih browser terlebih dahulu",Toast.LENGTH_SHORT).show();return;}try{String address=url.getText().toString();BrowserRuntime.publicUrl(address);s.browser.humanNavigate(address,(o,error)->{if(error!=null)Toast.makeText(this,"Halaman belum dapat dibuka",Toast.LENGTH_SHORT).show();});}catch(Exception e){Toast.makeText(this,"Gunakan alamat HTTPS publik",Toast.LENGTH_SHORT).show();}},false));content.addView(navigate);
+
+  boolean paired() {
+    return !app.secure.get("deviceToken", "").isEmpty();
   }
-  private void tasks(){content.addView(text("A clear trail.",29,ink,true));space(content,18);LinearLayout c=card();taskTitle=text("",19,green,true);taskDetail=text("",14,muted,false);taskTime=text("",30,ink,true);taskCounts=text("",13,muted,false);c.addView(taskTitle);c.addView(taskDetail);space(c,12);c.addView(taskTime);c.addView(taskCounts);content.addView(c);updateTasks();}
-  private void updateTasks(){if(taskTitle==null)return;JSONObject state=app.state.snapshot();if(!state.optString("taskId").isEmpty()){taskTitle.setText("Sedang bekerja");taskDetail.setText("Progress diamati langsung dari browser.");JSONObject p=state.optJSONObject("progress");taskTime.setText(p!=null&&p.has("currentTime")?String.format(java.util.Locale.US,"%.1f detik",p.optDouble("currentTime",0)):"");taskCounts.setText(p!=null&&p.has("frames")?p.optInt("frames")+" frame · "+p.optInt("audioChunks")+" segmen audio":"");}else{try{JSONObject last=new JSONObject(app.secure.get("lastTask","{}"));taskTitle.setText(last.has("status")?last.optString("status"):"Belum ada aktivitas");taskDetail.setText(last.optBoolean("verified")?"Hasil task terverifikasi.":"Hasil terverifikasi akan muncul setelah ada bukti yang sesuai.");taskTime.setText("");taskCounts.setText("");}catch(Exception ignored){}}}
-  private void settings(){content.addView(text("Make it yours.",29,ink,true));space(content,18);LinearLayout connectionCard=card();connectionCard.addView(text("Koneksi Hey",18,ink,true));connectButton=button("Jalankan Hey",this::connect,true);connectionCard.addView(connectButton);runtimeDetail=text("",12,muted,false);connectionCard.addView(runtimeDetail);content.addView(connectionCard);LinearLayout c=card();c.addView(text("Suara browser",18,ink,true));c.addView(text("Aktifkan sesi audio untuk mengamati suara dari Hey. Android akan meminta izin sesi; aplikasi lain tidak menjadi sumber audio.",14,muted,false));audioStatus=text("",13,muted,false);c.addView(audioStatus);audioButton=button("Aktifkan audio",()->{HeyService service=HeyService.current;if(app.state.snapshot().optString("audio").equals("CAPTURING")&&service!=null)service.stopAudio();else requestAudio();},true);c.addView(audioButton);content.addView(c);
-    LinearLayout device=card();device.addView(text("Kendali perangkat",18,ink,true));device.addView(button("Pengaturan Android",()->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName()))),false));pauseButton=button(app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Lanjutkan Hey":"Jeda Hey",()->{if(app.secure.get("ownerIntent","ACTIVE").equals("PAUSED"))startBrowser();else HeyService.pause(this);update();},false);device.addView(pauseButton);content.addView(device);content.addView(text("Hey by Ars · "+BuildConfig.VERSION_NAME+"\nBrowser, audio, koneksi, dan wake diverifikasi secara terpisah.",12,muted,false));
+
+  private void build() {
+    shell = new HeyShell(this, this::select, this::navigationMenu);
+    stage = new FrameLayout(this);
+    shell.addView(stage, new FrameLayout.LayoutParams(-1, -1));
+    shell.overlay();
+    setContentView(shell);
+    shell.setOnApplyWindowInsetsListener(
+        (v, insets) -> {
+          Insets bars =
+              insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+          Insets gestures = insets.getInsets(WindowInsets.Type.mandatorySystemGestures());
+          int bottom = Math.max(bars.bottom, gestures.bottom);
+          boolean ime = insets.isVisible(WindowInsets.Type.ime());
+          if (ime) bottom = Math.max(bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
+          v.setPadding(
+              Math.max(bars.left, gestures.left),
+              bars.top,
+              Math.max(bars.right, gestures.right),
+              bottom);
+          shell.ime(ime);
+          return WindowInsets.CONSUMED;
+        });
+    shell.requestApplyInsets();
+    render();
   }
-  private void connect(){if(app.secure.get("deviceToken","").isEmpty()){new AlertDialog.Builder(this).setTitle("Hubungkan Hey").setMessage("Pairing belum tersimpan di aplikasi ini. Di ChatGPT, panggil Hey dan minta tautan pairing, lalu buka tautan pada ponsel ini.").setPositiveButton("Mengerti",null).show();return;}startBrowser();}
-  private void startBrowser(){startRuntime(true);}
-  private void startRuntime(boolean explicit){
-    HeyService service=HeyService.current;boolean paired=!app.secure.get("deviceToken","").isEmpty();boolean paused=app.secure.get("ownerIntent","ACTIVE").equals("PAUSED");
-    if(!visible||!startPolicy.begin(SystemClock.elapsedRealtime(),explicit,paired,paused,service!=null&&service.running()))return;
-    app.state.runtime("STARTING","");app.state.connection("CONNECTING","");
-    try{Intent i=new Intent(this,HeyService.class);if(explicit)i.setAction("RESUME");startForegroundService(i);}
-    catch(RuntimeException e){app.state.runtime("ERROR","SERVICE_START_FAILED:"+e.getClass().getSimpleName());app.state.connection("ERROR","SERVICE_START_FAILED");}
-    // Notification permission is optional and must not gate foreground service startup.
-    if(explicit&&Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&app.secure.get("notificationAsked","").isEmpty()){
-      try{app.secure.put("notificationAsked","true");requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},20);}catch(Exception ignored){}
+
+  void navigationMenu() {
+    new AlertDialog.Builder(this)
+        .setTitle("Buka halaman")
+        .setItems(new String[] {"Home", "Browser", "Tasks", "Settings"}, (d, i) -> select(i))
+        .show();
+  }
+
+  void select(int index) {
+    if (page == index) return;
+    page = index;
+    render();
+  }
+
+  void render() {
+    HeyService s = HeyService.current;
+    if (s != null && s.browser != null && page != 1) s.browser.detach(this);
+    stage.removeAllViews();
+    homeStatus =
+        heroTitle =
+            heroDescription =
+                activity =
+                    connectionState = pairValue = serviceValue = browserValue = audioStatus = null;
+    homeAction = serviceAction = audioButton = null;
+    connectionDot = null;
+    shell.page(page, page == 1 ? this::probeArc : null);
+    shell.setContentDescription(
+        new String[] {"Home", "Browser", "Tasks", "Settings"}[page]
+            + ". Navigasi tersedia melalui aksi aksesibilitas atau tekan lama.");
+    if (page == 1) {
+      browser();
+      update();
+      return;
+    }
+    ScrollView scroll = new ScrollView(this);
+    scroll.setFillViewport(true);
+    scroll.setVerticalScrollBarEnabled(false);
+    content = ui.column();
+    content.setPadding(dp(22), dp(20), dp(22), dp(24));
+    scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+    FrameLayout.LayoutParams centered =
+        new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER_HORIZONTAL);
+    stage.addView(scroll, centered);
+    scroll.addOnLayoutChangeListener(
+        (v, l, t, r, b, ol, ot, or, ob) -> {
+          int extra = Math.max(0, (r - l - dp(620)) / 2);
+          if (content.getPaddingLeft() != dp(22) + extra)
+            content.setPadding(dp(22) + extra, dp(20), dp(22) + extra, dp(24));
+        });
+    switch (page) {
+      case 2:
+        new TaskScreen(this).build();
+        break;
+      case 3:
+        new SettingsScreen(this).build();
+        break;
+      default:
+        new HomeScreen(this).build();
+    }
+    update();
+  }
+
+  LinearLayout row() {
+    LinearLayout r = new LinearLayout(this);
+    r.setGravity(Gravity.CENTER_VERTICAL);
+    return r;
+  }
+
+  void addWeighted(LinearLayout r, View child) {
+    r.addView(child, new LinearLayout.LayoutParams(0, -2, 1));
+  }
+
+  void homeAction() {
+    switch (mode) {
+      case WORKING:
+        takeHuman();
+        select(1);
+        break;
+      case HUMAN:
+        select(1);
+        break;
+      default:
+        connect();
     }
   }
-  private void requestAudio(){if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},30);return;}startBrowser();startActivityForResult(getSystemService(MediaProjectionManager.class).createScreenCaptureIntent(),31);}
-  @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==30&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)requestAudio();}
-  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==31&&result==RESULT_OK&&data!=null)startForegroundService(new Intent(this,HeyService.class).putExtra("projectionData",data).putExtra("projectionResult",result));if(request==40&&HeyService.current!=null&&HeyService.current.browser!=null)HeyService.current.browser.chooseFile(result==RESULT_OK&&data!=null?data.getData():null);}
-  private void pairIntent(Intent intent){Uri uri=intent.getData();if(uri==null||!"hey".equals(uri.getScheme())||!"pair".equals(uri.getHost()))return;intent.setData(null);String gateway=uri.getQueryParameter("gateway"),code=uri.getQueryParameter("code");if(!app.secure.get("deviceToken","").isEmpty()){Toast.makeText(this,"Ponsel ini sudah dipasangkan",Toast.LENGTH_SHORT).show();return;}
-    app.state.connection("REGISTERING","");network.execute(()->{try{Transport.gateway(gateway);app.secure.put("gateway",gateway);Transport t=new Transport(app.secure);JSONObject result=t.send("/api/enroll",new JSONObject().put("code",code),false);app.secure.put("deviceId",result.getString("deviceId"));app.secure.put("deviceToken",result.getString("deviceToken"));app.state.connection("PAIRED","");app.refreshConfig();main.post(()->{startBrowser();render();});}catch(Exception e){app.state.connection("UNREGISTERED","PAIRING_FAILED");main.post(()->Toast.makeText(this,"Pairing belum berhasil. Minta tautan baru dari Hey.",Toast.LENGTH_LONG).show());}});
+
+  private void browser() {
+    if (browserPage == null) {
+      browserPage = ui.column();
+      browserPage.setBackgroundColor(getColor(R.color.hey_chrome));
+      LinearLayout urlRegion = ui.column();
+      urlRegion.setPadding(dp(16), dp(10), dp(16), dp(10));
+      address = new EditText(this);
+      address.setTextColor(ui.text);
+      address.setHintTextColor(ui.muted);
+      address.setTextSize(14);
+      address.setSingleLine(true);
+      address.setSelectAllOnFocus(true);
+      address.setHint("Alamat atau pencarian");
+      address.setContentDescription("Alamat atau pencarian. Tekan lama untuk navigasi Hey.");
+      address.setInputType(
+          android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
+      address.setImeOptions(EditorInfo.IME_ACTION_GO);
+      address.setPadding(dp(16), dp(12), dp(16), dp(12));
+      address.setMinimumHeight(dp(48));
+      address.setBackground(ui.surface(ui.group, 17, ui.divider));
+      address.setOnEditorActionListener(
+          (v, action, event) -> {
+            if (action == EditorInfo.IME_ACTION_GO
+                || event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+              navigateAddress();
+              return true;
+            }
+            return false;
+          });
+      address.setOnLongClickListener(
+          v -> {
+            navigationMenu();
+            return true;
+          });
+      urlRegion.addView(address, new LinearLayout.LayoutParams(-1, -2));
+      browserPage.addView(urlRegion);
+      browserHost = new FrameLayout(this);
+      browserHost.setContentDescription("Browser Hey");
+      browserPage.addView(browserHost, new LinearLayout.LayoutParams(-1, 0, 1));
+    }
+    if (browserPage.getParent() instanceof android.view.ViewGroup)
+      ((android.view.ViewGroup) browserPage.getParent()).removeView(browserPage);
+    stage.addView(browserPage, new FrameLayout.LayoutParams(-1, -1));
+    attachBrowser();
   }
-  @Override public void changed(){main.post(this::update);}
-  private void update(){JSONObject s=app.state.snapshot();updateRuntime(s);if(audioStatus!=null){String audio=s.optString("audio");audioStatus.setText(audio.equals("CAPTURING")?"Sesi audio aktif.":audio.equals("CONSENT_ENDED")?"Izin sesi berakhir. Aktifkan ulang untuk mengamati suara.":audio.equals("OFF")?"Audio belum diaktifkan.":"Audio belum tersedia: "+audio);audioButton.setText(audio.equals("CAPTURING")?"Hentikan audio":"Aktifkan audio");}if(pauseButton!=null)pauseButton.setText(app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Lanjutkan Hey":"Jeda Hey");attachBrowser();if(connection!=null){String status=s.optString("connection");connection.setText(switch(status){case "PAUSED"->"Hey dijeda";case "ONLINE"->"Terhubung";case "PAIRED"->"Ponsel sudah dikenali";case "REGISTERING","CONNECTING"->"Menyambungkan…";case "ERROR"->"Hey belum dapat berjalan";case "OFFLINE"->"Menghubungkan kembali…";case "UNKNOWN"->"Memeriksa koneksi…";default->"Satu koneksi, sekali saja";});detail.setText(app.secure.get("deviceToken","").isEmpty()?"Hubungkan ponsel melalui tautan Hey di ChatGPT.":app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Aktivitas dijeda. Tekan Lanjutkan Hey saat kamu siap.":status.equals("ONLINE")?(s.optString("browser").equals("READY")?"Browser siap. Kamu tetap bebas menggunakan ponsel.":"Koneksi tersambung. Status browser: "+s.optString("browser")):status.equals("CONNECTING")?"Menjalankan Hey dan menunggu heartbeat pertama…":s.optString("runtime").equals("ERROR")?"Startup belum berhasil. Tekan Jalankan Hey untuk mencoba lagi.":"Pairing tersimpan. Tekan Jalankan Hey untuk memulihkan koneksi.");}updateTasks();}
-  private void updateRuntime(JSONObject s){
-    boolean paired=!app.secure.get("deviceToken","").isEmpty(),paused=app.secure.get("ownerIntent","ACTIVE").equals("PAUSED");
-    if(connectButton!=null)connectButton.setText(!paired?"Hubungkan dari ChatGPT":paused?"Lanjutkan Hey":s.optString("connection").equals("ONLINE")?"Periksa koneksi":"Jalankan Hey");
-    if(runtimeDetail!=null){String reason=s.optString("runtimeReason");if(reason.isEmpty()&&!s.optString("connection").equals("ONLINE"))reason=s.optString("reason");String status=!paired?"Pairing belum tersimpan di aplikasi ini.":paused?"Hey dijeda olehmu.":s.optString("runtime").equals("RUNNING")?"Service aktif · koneksi "+s.optString("connection"):s.optString("runtime").equals("STARTING")?"Service sedang dimulai…":"Service belum aktif"+(reason.isEmpty()?".":" · "+reason);runtimeDetail.setText("Hey "+BuildConfig.VERSION_NAME+" · "+status+(s.optString("runtime").equals("RUNNING")&&!reason.isEmpty()?" · "+reason:""));}
+
+  private void navigateAddress() {
+    HeyService s = HeyService.current;
+    if (s == null || s.browser == null) {
+      connect();
+      return;
+    }
+    try {
+      String url = AddressInput.resolve(address.getText().toString());
+      takeHuman();
+      s.browser.humanNavigate(
+          url,
+          (o, e) -> {
+            if (e != null) toast("Halaman belum dapat dibuka: " + e);
+          });
+      address.clearFocus();
+      ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+          .hideSoftInputFromWindow(address.getWindowToken(), 0);
+    } catch (Exception e) {
+      toast("Gunakan alamat HTTPS publik atau kata pencarian.");
+    }
   }
-  private void attachBrowser(){if(browserHost==null)return;HeyService s=HeyService.current;if(s!=null&&s.browser!=null&&browserHost.getChildCount()==0)s.browser.attach(this,browserHost);if(browserStatus!=null)browserStatus.setText(s==null||!s.running()?"Browser belum aktif. Tekan Jalankan Hey.":s.browser==null?"Browser sedang disiapkan: "+app.state.snapshot().optString("browser"):app.state.snapshot().optString("control").equals("HUMAN")?"Kamu memegang kendali.":"Hey memegang kendali. Ambil alih untuk berinteraksi.");}
-  private final Runnable surfaceTick=new Runnable(){@Override public void run(){if(visible)startRuntime(false);attachBrowser();main.postDelayed(this,1000);}};
-  @Override protected void onResume(){super.onResume();visible=true;startRuntime(false);app.refreshConfig();main.removeCallbacks(surfaceTick);main.post(surfaceTick);update();}
-  @Override protected void onPause(){visible=false;main.removeCallbacks(surfaceTick);HeyService s=HeyService.current;if(s!=null&&s.browser!=null)s.browser.detach(this);super.onPause();}
-  @Override protected void onDestroy(){app.state.unlisten(this);main.removeCallbacksAndMessages(null);network.shutdownNow();super.onDestroy();}
+
+  private void takeHuman() {
+    HeyService s = HeyService.current;
+    if (s != null) s.control(true);
+  }
+
+  private void probeArc(float x, float y, java.util.function.Consumer<Boolean> result) {
+    HeyService s = HeyService.current;
+    if (s == null || s.browser == null || browserHost == null) {
+      result.accept(true);
+      return;
+    }
+    int[] pos = new int[2];
+    browserHost.getLocationOnScreen(pos);
+    int[] shellPos = new int[2];
+    shell.getLocationOnScreen(shellPos);
+    s.browser.checkGesture(x + shellPos[0] - pos[0], y + shellPos[1] - pos[1], result);
+  }
+
+  private void attachBrowser() {
+    if (page != 1 || browserHost == null || !visible) return;
+    HeyService s = HeyService.current;
+    if (s != null && s.browser != null) {
+      if (browserEmpty != null) {
+        browserHost.removeView(browserEmpty);
+        browserEmpty = null;
+      }
+      s.browser.attachIfNeeded(this, browserHost);
+      if (!address.hasFocus()) address.setText(s.browser.currentUrl());
+      if ("FILE_SELECTION_REQUIRED".equals(app.state.snapshot().optString("browser")))
+        showFilePicker();
+    } else if (browserEmpty == null) {
+      browserEmpty =
+          ui.text(
+              paired()
+                  ? "Browser belum aktif.\nKetuk untuk menjalankan Hey."
+                  : "Hubungkan Hey untuk membuka browser.\nKetuk untuk panduan pairing.",
+              15,
+              ui.secondary,
+              false);
+      browserEmpty.setGravity(Gravity.CENTER);
+      browserEmpty.setPadding(dp(30), dp(20), dp(30), dp(20));
+      browserEmpty.setOnClickListener(v -> connect());
+      browserEmpty.setOnLongClickListener(
+          v -> {
+            navigationMenu();
+            return true;
+          });
+      browserHost.removeAllViews();
+      browserHost.addView(browserEmpty, new FrameLayout.LayoutParams(-1, -1));
+    }
+  }
+
+  private boolean filePickerShown;
+
+  private void showFilePicker() {
+    if (filePickerShown) return;
+    filePickerShown = true;
+    startActivityForResult(
+        new Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .setType("*/*")
+            .addCategory(Intent.CATEGORY_OPENABLE),
+        40);
+  }
+
+  JSONObject lastTask() {
+    try {
+      return new JSONObject(app.secure.get("lastTask", "{}"));
+    } catch (Exception e) {
+      return new JSONObject();
+    }
+  }
+
+  String taskName(String method, String action) {
+    return switch (method) {
+      case "navigate" -> "Membuka halaman";
+      case "observe" -> "Mengamati browser";
+      case "watch" -> "Mengamati media";
+      case "locate" -> "Mencari elemen halaman";
+      case "media" -> "Mengendalikan media";
+      case "action" ->
+          switch (action) {
+            case "click" -> "Menekan elemen halaman";
+            case "fill" -> "Mengisi halaman";
+            case "scroll" -> "Menjelajahi halaman";
+            default -> "Interaksi browser";
+          };
+      default -> "Pekerjaan browser";
+    };
+  }
+
+  String taskSignature() {
+    JSONObject s = app.state.snapshot();
+    return s.optString("taskId")
+        + s.optString("control")
+        + s.optJSONObject("progress")
+        + app.secure.get("lastTask", "{}");
+  }
+
+  void toast(String s) {
+    main.post(() -> Toast.makeText(this, s, Toast.LENGTH_LONG).show());
+  }
+
+  void connect() {
+    if (app.secure.get("deviceToken", "").isEmpty()) {
+      new AlertDialog.Builder(this)
+          .setTitle("Hubungkan Hey")
+          .setMessage(
+              "Pairing belum tersimpan di aplikasi ini. Di ChatGPT, panggil Hey dan minta tautan"
+                  + " pairing, lalu buka tautan pada ponsel ini.")
+          .setPositiveButton("Mengerti", null)
+          .show();
+      return;
+    }
+    startBrowser();
+  }
+
+  void startBrowser() {
+    startRuntime(true);
+  }
+
+  private void startRuntime(boolean explicit) {
+    HeyService service = HeyService.current;
+    boolean paired = !app.secure.get("deviceToken", "").isEmpty();
+    boolean paused = app.secure.get("ownerIntent", "ACTIVE").equals("PAUSED");
+    if (!visible
+        || !startPolicy.begin(
+            SystemClock.elapsedRealtime(),
+            explicit,
+            paired,
+            paused,
+            service != null && service.running())) return;
+    app.state.runtime("STARTING", "");
+    app.state.connection("CONNECTING", "");
+    try {
+      Intent i = new Intent(this, HeyService.class);
+      if (explicit) i.setAction("RESUME");
+      startForegroundService(i);
+    } catch (RuntimeException e) {
+      app.state.runtime("ERROR", "SERVICE_START_FAILED:" + e.getClass().getSimpleName());
+      app.state.connection("ERROR", "SERVICE_START_FAILED");
+    }
+    // Notification permission is optional and must not gate foreground service startup.
+    if (explicit
+        && Build.VERSION.SDK_INT >= 33
+        && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        && app.secure.get("notificationAsked", "").isEmpty()) {
+      try {
+        app.secure.put("notificationAsked", "true");
+        requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, 20);
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  void requestAudio() {
+    if (!paired()) {
+      connect();
+      return;
+    }
+    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+        != PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, 30);
+      return;
+    }
+    startBrowser();
+    startActivityForResult(
+        getSystemService(MediaProjectionManager.class).createScreenCaptureIntent(), 31);
+  }
+
+  @Override
+  public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+    super.onRequestPermissionsResult(request, permissions, results);
+    if (request == 30 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED)
+      requestAudio();
+  }
+
+  @Override
+  protected void onActivityResult(int request, int result, Intent data) {
+    super.onActivityResult(request, result, data);
+    if (request == 31 && result == RESULT_OK && data != null)
+      startForegroundService(
+          new Intent(this, HeyService.class)
+              .putExtra("projectionData", data)
+              .putExtra("projectionResult", result));
+    if (request == 40) filePickerShown = false;
+    if (request == 40 && HeyService.current != null && HeyService.current.browser != null)
+      HeyService.current.browser.chooseFile(
+          result == RESULT_OK && data != null ? data.getData() : null);
+  }
+
+  private void pairIntent(Intent intent) {
+    Uri uri = intent.getData();
+    if (uri == null
+        || !"hey".equals(uri.getScheme())
+        || !(BuildConfig.DEBUG ? "pair-preview" : "pair").equals(uri.getHost())) return;
+    intent.setData(null);
+    String gateway = uri.getQueryParameter("gateway"), code = uri.getQueryParameter("code");
+    if (!app.secure.get("deviceToken", "").isEmpty()) {
+      Toast.makeText(this, "Ponsel ini sudah dipasangkan", Toast.LENGTH_SHORT).show();
+      return;
+    }
+    app.state.connection("REGISTERING", "");
+    network.execute(
+        () -> {
+          try {
+            Transport.gateway(gateway);
+            app.secure.put("gateway", gateway);
+            Transport t = new Transport(app.secure);
+            JSONObject result = t.send("/api/enroll", new JSONObject().put("code", code), false);
+            app.secure.put("deviceId", result.getString("deviceId"));
+            app.secure.put("deviceToken", result.getString("deviceToken"));
+            app.state.connection("PAIRED", "");
+            app.refreshConfig();
+            main.post(
+                () -> {
+                  startBrowser();
+                  render();
+                });
+          } catch (Exception e) {
+            app.state.connection("UNREGISTERED", "PAIRING_FAILED");
+            main.post(
+                () ->
+                    Toast.makeText(
+                            this,
+                            "Pairing belum berhasil. Minta tautan baru dari Hey.",
+                            Toast.LENGTH_LONG)
+                        .show());
+          }
+        });
+  }
+
+  @Override
+  public void changed() {
+    main.post(this::update);
+  }
+
+  private void update() {
+    if (ui == null) return;
+    JSONObject s = app.state.snapshot();
+    mode = UiState.mode(s, paired());
+    if (homeStatus != null) {
+      homeStatus.setText("•  " + UiState.status(mode));
+      homeStatus.setTextColor(ui.accent(mode));
+      heroTitle.setText(UiState.title(mode));
+      heroDescription.setText(UiState.description(mode));
+      String action = UiState.action(mode);
+      homeAction.setText(action);
+      homeAction.setVisibility(action.isEmpty() ? View.GONE : View.VISIBLE);
+      activity.setText(
+          !paired()
+              ? "Belum ada aktivitas"
+              : mode == UiState.Mode.PAUSED
+                  ? "Menunggu dilanjutkan"
+                  : !s.optString("taskId").isEmpty()
+                      ? "Tugas sedang berlangsung"
+                      : lastTask().has("status")
+                          ? "DONE".equals(lastTask().optString("status"))
+                              ? lastTask().optBoolean("verified")
+                                  ? "Tugas terakhir terverifikasi"
+                                  : "Eksekusi terakhir selesai · hasil belum terverifikasi"
+                              : "Tugas terakhir terhenti"
+                          : "Tidak ada tugas aktif");
+    }
+    if (pairValue != null) {
+      connectionState.setText(UiState.status(mode));
+      connectionState.setTextColor(ui.accent(mode));
+      connectionDot.setImageTintList(android.content.res.ColorStateList.valueOf(ui.accent(mode)));
+      pairValue.setText(paired() ? "Terpasang" : "Belum terpasang");
+      serviceValue.setText(
+          "PAUSED".equals(s.optString("ownerIntent"))
+              ? "Dijeda"
+              : "RUNNING".equals(s.optString("runtime"))
+                  ? "Berjalan"
+                  : "STARTING".equals(s.optString("runtime")) ? "Memulai" : "Terhenti");
+      browserValue.setText(
+          "READY".equals(s.optString("browser"))
+              ? "Siap"
+              : "LOADING".equals(s.optString("browser"))
+                  ? "Memuat"
+                  : java.util.Set.of("IDLE", "").contains(s.optString("browser"))
+                      ? "Tidak aktif"
+                      : "Belum siap");
+      serviceAction.setText(
+          !paired()
+              ? "Panduan pairing"
+              : "PAUSED".equals(s.optString("ownerIntent"))
+                  ? "Lanjutkan Hey"
+                  : "RUNNING".equals(s.optString("runtime")) ? "Jeda Hey" : "Coba jalankan Hey");
+    }
+    if (audioStatus != null) {
+      String audio = s.optString("audio");
+      audioStatus.setText(
+          audio.equals("CAPTURING")
+              ? "Sesi audio aktif."
+              : audio.equals("OFF") ? "Audio belum diaktifkan." : "Audio: " + audio);
+      audioButton.setText(audio.equals("CAPTURING") ? "Hentikan audio" : "Aktifkan audio");
+    }
+    if (page == 2 && !taskSignature().equals(taskSignature)) {
+      render();
+      return;
+    }
+    attachBrowser();
+  }
+
+  private final Runnable surfaceTick =
+      new Runnable() {
+        @Override
+        public void run() {
+          if (!visible) return;
+          startRuntime(false);
+          update();
+          main.postDelayed(this, 1000);
+        }
+      };
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    visible = true;
+    startRuntime(false);
+    app.refreshConfig();
+    main.removeCallbacks(surfaceTick);
+    main.post(surfaceTick);
+    update();
+  }
+
+  @Override
+  protected void onPause() {
+    visible = false;
+    main.removeCallbacks(surfaceTick);
+    HeyService s = HeyService.current;
+    if (s != null && s.browser != null) s.browser.detach(this);
+    super.onPause();
+  }
+
+  @Override
+  public void onBackPressed() {
+    HeyService s = HeyService.current;
+    if (page == 1 && s != null && s.browser != null && s.browser.humanBack()) return;
+    if (page != 0) {
+      select(0);
+      return;
+    }
+    super.onBackPressed();
+  }
+
+  @Override
+  protected void onDestroy() {
+    app.state.unlisten(this);
+    main.removeCallbacksAndMessages(null);
+    network.shutdownNow();
+    super.onDestroy();
+  }
 }

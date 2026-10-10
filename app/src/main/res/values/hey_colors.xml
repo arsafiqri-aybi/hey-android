@@ -1,0 +1,12 @@
+<resources>
+  <color name="hey_ink">#000000</color><color name="hey_paper">#FFFFFF</color>
+  <color name="hey_canvas">#0D1014</color><color name="hey_chrome">#0B0E12</color>
+  <color name="hey_group">#212830</color><color name="hey_primary">#242B33</color>
+  <color name="hey_home">#23292F</color><color name="hey_task">#252C33</color>
+  <color name="hey_nested">#161D24</color><color name="hey_icon">#333D47</color>
+  <color name="hey_icon_strong">#354049</color><color name="hey_divider">#39434C</color>
+  <color name="hey_text">#F4F6F7</color><color name="hey_secondary">#A7B5BF</color>
+  <color name="hey_muted">#8998A3</color><color name="hey_healthy">#B4DEC5</color>
+  <color name="hey_working">#C5DEE7</color><color name="hey_attention">#E4CEA5</color>
+  <color name="hey_problem">#E4B8B0</color>
+</resources>

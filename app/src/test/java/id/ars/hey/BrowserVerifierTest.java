@@ -16,6 +16,19 @@ public class BrowserVerifierTest {
     assertTrue(BrowserVerifier.action(p,before,o("{viewport:{scrollX:0,scrollY:176.66}}"),false));
     assertFalse(BrowserVerifier.action(p,before,before,false));
   }
+  @Test public void nestedScrollIsVerifiedWithoutWindowMovement()throws Exception{
+    JSONObject before=o("{viewport:{scrollX:0,scrollY:0},scrollRegions:[{index:0,top:0,left:0}]}");
+    JSONObject after=o("{viewport:{scrollX:0,scrollY:0},scrollRegions:[{index:0,top:180,left:0}]}");
+    assertTrue(BrowserVerifier.action(o("{action:'scroll'}"),before,after,false));
+    assertFalse(BrowserVerifier.action(o("{action:'scroll'}"),before,before,false));
+    assertFalse(BrowserVerifier.action(o("{action:'scroll'}"),before,o("{viewport:{scrollX:0,scrollY:0},scrollRegions:[]}"),false));
+  }
+  @Test public void clickRequiresObservableEffectRatherThanDispatchAlone()throws Exception{
+    JSONObject before=o("{text:'Before',title:'Page',url:'https://example.com/',documentReady:'complete',focusedElement:'button'}");
+    JSONObject changed=o("{text:'After',title:'Page',url:'https://example.com/',documentReady:'complete',focusedElement:'button'}");
+    assertTrue(BrowserVerifier.action(o("{action:'click'}"),before,changed,false));
+    assertFalse(BrowserVerifier.action(o("{action:'click'}"),before,before,false));
+  }
   @Test public void tabVerificationUsesIdentityAndCommittedPage()throws Exception{
     JSONObject before=o("{tabs:[{tabId:'one'}],tabId:'one'}"),after=o("{tabs:[{tabId:'one'},{tabId:'two'}],tabId:'two',url:'https://example.com/',documentReady:'complete'}");
     assertTrue(BrowserVerifier.action(o("{action:'tab_open',url:'https://example.com'}"),before,after,false));
