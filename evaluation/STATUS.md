@@ -1,3 +1,7 @@
+# Hey Browser Engine vNext 0.3.0-dev — 2026-10-10 feature candidate
+
+Changes are isolated to `feat/hey-browser-engine-vnext-p0-p1-20261010`. Local Chromium browser fixture PASS; new Java regression tests are source-added but Android/JVM build unavailable here. Real Vivo takeover, nested swipe, screenshot masking/compositor, actionability, lifecycle and media/audio remain **RETEST REQUIRED**, not a release certification. No APK installed, no device/pairing touched, no deployment. See `docs/BROWSER_ENGINE_VNEXT_P0_P1.md`.
+
 # Service recovery — 0.2.1
 
 Android hotfix built and tested; see repair-0.2.1.json and docs/SERVICE_RECOVERY_0.2.1.md. Same signing certificate as the supplied 0.2.0 candidate; no uninstall/reset performed. Gateway remains 0.2.0. Physical first heartbeat, pause/resume and startup tests remain RETEST_REQUIRED after installation. Existing history below is preserved.
