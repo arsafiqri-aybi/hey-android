@@ -18,7 +18,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity implements StateStore.Listener {
   private HeyApp app;private final Handler main=new Handler(Looper.getMainLooper());private final java.util.concurrent.ExecutorService network=Executors.newSingleThreadExecutor();
   private final RuntimeStartPolicy startPolicy=new RuntimeStartPolicy();private boolean visible;private Button connectButton;private TextView runtimeDetail;
-  private FrameLayout shell;private WebView homeView;private boolean homeLoaded;private LinearLayout root,content,nav;private TextView connection,detail,taskTitle,taskDetail,taskTime,taskCounts;private FrameLayout browserHost;private Button pauseButton;private TextView browserStatus,audioStatus;private Button audioButton;private String page="Home";private float downX,downY;
+  private FrameLayout shell;private WebView homeView;private boolean homeLoaded,lowEffects;private Insets homeInsets=Insets.NONE;private String wallpaperAsset="wallpaper.webp";private LinearLayout root,content,nav;private TextView connection,detail,taskTitle,taskDetail,taskTime,taskCounts;private FrameLayout browserHost;private Button pauseButton;private TextView browserStatus,audioStatus;private Button audioButton;private String page="Home";private float downX,downY;
   private final int ink=Color.rgb(35,42,37),muted=Color.rgb(108,117,108),green=Color.rgb(51,82,61),background=Color.rgb(243,242,239);
   @Override public void onCreate(Bundle state){super.onCreate(state);app=(HeyApp)getApplication();app.state.listen(this);getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);build();pairIntent(getIntent());}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);pairIntent(intent);}
@@ -46,18 +46,34 @@ public final class MainActivity extends Activity implements StateStore.Listener 
     if(Build.VERSION.SDK_INT>=29)getWindow().setNavigationBarContrastEnforced(false);
     getWindow().getDecorView().setSystemUiVisibility(home?(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE):(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR));
     if(home)homeView.onResume();else homeView.onPause();
+    if(homeLoaded)homeView.evaluateJavascript("window.heySetActive&&window.heySetActive("+(home&&visible)+");",null);
     if(Settings.Global.getFloat(getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1)>0){content.setAlpha(.65f);content.setTranslationY(dp(5));content.animate().alpha(1).translationY(0).setDuration(220).start();}update();
   }
 
   // App-owned, offline-only UI WebView. Never expose JS interfaces to browsing pages.
   private void createHomeView(){
     homeView=new WebView(this);
+    ActivityManager manager=getSystemService(ActivityManager.class);
+    android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
+    wallpaperAsset=WallpaperPolicy.asset(metrics.widthPixels,metrics.heightPixels,manager.getMemoryClass(),manager.isLowRamDevice());
+    lowEffects=manager.isLowRamDevice()||manager.getMemoryClass()<192;
     homeView.setBackgroundColor(Color.rgb(38,65,54));
     homeView.setVerticalScrollBarEnabled(false);
+    homeView.setOnApplyWindowInsetsListener((v,insets)->{
+      homeInsets=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());configureHomeSurface();
+      return new WindowInsets.Builder(insets).setInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout(),Insets.NONE).build();
+    });
     WebSettings config=homeView.getSettings();
     config.setJavaScriptEnabled(true);config.setDomStorageEnabled(false);
     config.setAllowFileAccess(false);config.setAllowContentAccess(false);config.setBlockNetworkLoads(true);
     homeView.setWebViewClient(new WebViewClient(){
+      @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+        // This alias loads only the chosen offline image, without decoding every quality tier.
+        if("file:///android_asset/wallpaper.webp".equals(request.getUrl().toString())){
+          try{return new WebResourceResponse("image/webp",null,getAssets().open(wallpaperAsset));}catch(java.io.IOException ignored){}
+        }
+        return null;
+      }
       @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
         Uri uri=request.getUrl();
         if("hey-action".equals(uri.getScheme())){
@@ -67,12 +83,21 @@ public final class MainActivity extends Activity implements StateStore.Listener 
       }
       @Override public void onPageFinished(WebView v,String url){
         if(url!=null&&url.startsWith("file:///android_asset/home.html")){
-          homeLoaded=true;updateHomeSurface(app.state.snapshot());
+          homeLoaded=true;configureHomeSurface();updateHomeSurface(app.state.snapshot());
         }
       }
     });
     shell.addView(homeView,new FrameLayout.LayoutParams(-1,-1));
     homeView.loadUrl("file:///android_asset/home.html");
+  }
+  private void configureHomeSurface(){
+    if(!homeLoaded||homeView==null)return;
+    float density=getResources().getDisplayMetrics().density;
+    try{JSONObject config=new JSONObject().put("safeTop",homeInsets.top/density).put("safeBottom",homeInsets.bottom/density)
+      .put("safeLeft",homeInsets.left/density).put("safeRight",homeInsets.right/density).put("lowEffects",lowEffects)
+      .put("reduceMotion",Settings.Global.getFloat(getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1)==0);
+      homeView.evaluateJavascript("window.heyConfigure&&window.heyConfigure("+config+");window.heySetActive&&window.heySetActive("+(visible&&"Home".equals(page))+");",null);
+    }catch(JSONException ignored){}
   }
   private void handleHomeAction(String action){
     if(action==null)return;
@@ -156,8 +181,8 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   }
   private void attachBrowser(){if(browserHost==null)return;HeyService s=HeyService.current;if(s!=null&&s.browser!=null&&browserHost.getChildCount()==0)s.browser.attach(this,browserHost);if(browserStatus!=null)browserStatus.setText(s==null||!s.running()?"Browser belum aktif. Tekan Jalankan Hey.":s.browser==null?"Browser sedang disiapkan: "+app.state.snapshot().optString("browser"):app.state.snapshot().optString("control").equals("HUMAN")?"Kamu memegang kendali.":"Hey memegang kendali. Ambil alih untuk berinteraksi.");}
   private final Runnable surfaceTick=new Runnable(){@Override public void run(){if(visible)startRuntime(false);attachBrowser();main.postDelayed(this,1000);}};
-  @Override protected void onResume(){super.onResume();visible=true;if(homeView!=null&&"Home".equals(page))homeView.onResume();startRuntime(false);app.refreshConfig();main.removeCallbacks(surfaceTick);main.post(surfaceTick);update();}
-  @Override protected void onPause(){visible=false;if(homeView!=null)homeView.onPause();main.removeCallbacks(surfaceTick);HeyService s=HeyService.current;if(s!=null&&s.browser!=null)s.browser.detach(this);super.onPause();}
+  @Override protected void onResume(){super.onResume();visible=true;if(homeView!=null&&"Home".equals(page))homeView.onResume();configureHomeSurface();startRuntime(false);app.refreshConfig();main.removeCallbacks(surfaceTick);main.post(surfaceTick);update();}
+  @Override protected void onPause(){visible=false;if(homeView!=null){if(homeLoaded)homeView.evaluateJavascript("window.heySetActive&&window.heySetActive(false);",null);homeView.onPause();}main.removeCallbacks(surfaceTick);HeyService s=HeyService.current;if(s!=null&&s.browser!=null)s.browser.detach(this);super.onPause();}
   @Override protected void onDestroy(){if(homeView!=null){shell.removeView(homeView);homeView.destroy();}app.state.unlisten(this);main.removeCallbacksAndMessages(null);network.shutdownNow();super.onDestroy();}
 }
 

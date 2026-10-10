@@ -29,6 +29,21 @@ public class BrowserVerifierTest {
     assertTrue(BrowserVerifier.action(o("{action:'click'}"),before,changed,false));
     assertFalse(BrowserVerifier.action(o("{action:'click'}"),before,before,false));
   }
+  @Test public void nestedRegionsUseIdentityRatherThanArrayPosition()throws Exception{
+    JSONObject p=o("{action:'scroll',scrollRegionId:'e1'}");
+    JSONObject before=o("{scrollRegions:[{id:'e1',top:0,left:0},{id:'e2',top:80,left:0}]}");
+    JSONObject reordered=o("{scrollRegions:[{id:'e2',top:80,left:0},{id:'e1',top:0,left:0}]}");
+    assertFalse(BrowserVerifier.action(p,before,reordered,false));
+    reordered.getJSONArray("scrollRegions").getJSONObject(1).put("top",40);
+    assertTrue(BrowserVerifier.action(p,before,reordered,false));
+    assertFalse(BrowserVerifier.action(o("{action:'scroll',scrollRegionId:'e2'}"),before,reordered,false));
+  }
+  @Test public void checkboxChangesAreBoundToTheClickedElement()throws Exception{
+    JSONObject p=o("{action:'click',targetElementId:'e1'}");
+    JSONObject before=o("{elements:[{elementId:'e1',checked:false}]}");
+    assertTrue(BrowserVerifier.action(p,before,o("{elements:[{elementId:'e1',checked:true}]}"),false));
+    assertFalse(BrowserVerifier.action(p,before,o("{elements:[{elementId:'other',checked:true}]}"),false));
+  }
   @Test public void tabVerificationUsesIdentityAndCommittedPage()throws Exception{
     JSONObject before=o("{tabs:[{tabId:'one'}],tabId:'one'}"),after=o("{tabs:[{tabId:'one'},{tabId:'two'}],tabId:'two',url:'https://example.com/',documentReady:'complete'}");
     assertTrue(BrowserVerifier.action(o("{action:'tab_open',url:'https://example.com'}"),before,after,false));

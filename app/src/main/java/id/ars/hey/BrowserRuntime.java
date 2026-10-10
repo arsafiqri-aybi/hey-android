@@ -42,10 +42,10 @@ final class BrowserRuntime implements AutoCloseable {
   private final ImageReader reader;private final VirtualDisplay display;private final Presentation presentation;private final FrameLayout container;
   private final LinkedHashMap<String,WebView> tabs=new LinkedHashMap<>();private String active="",version=UUID.randomUUID().toString(),namespace="hey_"+UUID.randomUUID().toString().replace("-","");
   private long operationEpoch;private boolean injectingInput;private FrameLayout visibleHost;private Activity visibleActivity;private final Map<WebView,MutableContextWrapper> contexts=new HashMap<>();private final Map<WebView,Long> epochs=new HashMap<>();
-  private String observer,locatorScript,actionabilityScript;private Callback navigation;private Bitmap frame;private long frameAt;private boolean screenshotPending,closed;private ValueCallback<Uri[]> fileCallback;
+  private String observer,semanticScript,locatorScript,actionabilityScript,scrollScript,fillScript;private Callback navigation;private Bitmap frame;private long frameAt;private boolean screenshotPending,closed;private ValueCallback<Uri[]> fileCallback;
   BrowserRuntime(Context context,StateStore state,SecureStore store)throws Exception {
     this.context=context;this.state=state;this.store=store;
-    observer=loadAsset("observe.js");locatorScript=loadAsset("locator.js");actionabilityScript=loadAsset("actionability.js");
+    semanticScript=loadAsset("semantic.js");observer=semanticScript+"\n"+loadAsset("observe.js");locatorScript=loadAsset("locator.js");actionabilityScript=loadAsset("actionability.js");scrollScript=loadAsset("scroll.js");fillScript=loadAsset("fill.js");
     WebView.setWebContentsDebuggingEnabled(false);
     reader=ImageReader.newInstance(720,1280,PixelFormat.RGBA_8888,2);
     DisplayManager dm=context.getSystemService(DisplayManager.class);
@@ -63,8 +63,11 @@ final class BrowserRuntime implements AutoCloseable {
     @Override public boolean dispatchTouchEvent(MotionEvent event){
       if(!injectingInput&&!state.snapshot().optString("control").equals("HUMAN"))return true;
       // During HUMAN takeover swipes belong to this WebView, never the outer app ScrollView.
-      if(!injectingInput&&getParent()!=null){int a=event.getActionMasked();if(a==MotionEvent.ACTION_DOWN)getParent().requestDisallowInterceptTouchEvent(true);else if(a==MotionEvent.ACTION_UP||a==MotionEvent.ACTION_CANCEL)getParent().requestDisallowInterceptTouchEvent(false);}
-      return super.dispatchTouchEvent(event);
+      boolean owned=!injectingInput&&getParent()!=null;
+      if(owned)getParent().requestDisallowInterceptTouchEvent(true);
+      boolean handled=super.dispatchTouchEvent(event);
+      if(owned&&(event.getActionMasked()==MotionEvent.ACTION_UP||event.getActionMasked()==MotionEvent.ACTION_CANCEL))getParent().requestDisallowInterceptTouchEvent(false);
+      return handled;
     }
     @Override public boolean performAccessibilityAction(int action,Bundle args){if(!state.snapshot().optString("control").equals("HUMAN"))return false;return super.performAccessibilityAction(action,args);}
   }
@@ -81,7 +84,7 @@ final class BrowserRuntime implements AutoCloseable {
       @Override public void onPageFinished(WebView v,String url){CookieManager.getInstance().flush();persistTabs();state.browser("READY");if(navigation!=null&&v==web()){Callback c=navigation;navigation=null;observe(true,c);}}
       @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();finishNavigation("TLS_ERROR");}
       @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame())finishNavigation("NAVIGATION_FAILED");}
-      @Override public boolean onRenderProcessGone(WebView v,RenderProcessGoneDetail detail){finishNavigation("RENDERER_LOST");state.browser("RENDERER_LOST");container.removeView(v);tabs.values().remove(v);v.destroy();return true;}
+      @Override public boolean onRenderProcessGone(WebView v,RenderProcessGoneDetail detail){finishNavigation("RENDERER_LOST");state.browser("RENDERER_LOST");operationEpoch++;invalidate();detach(v);tabs.values().remove(v);contexts.remove(v);epochs.remove(v);v.destroy();if(!tabs.containsKey(active))active="";return true;}
     });
     view.setWebChromeClient(new WebChromeClient(){
       @Override public void onPermissionRequest(PermissionRequest request){request.deny();state.browser("WEBSITE_PERMISSION_REQUIRED");}
@@ -104,7 +107,18 @@ final class BrowserRuntime implements AutoCloseable {
   static void publicUrl(String url)throws Exception{UrlPolicy.validate(url);}
   static void networkUrl(String url)throws Exception {URI u=new URI(url);if(Set.of("data","blob","about").contains(u.getScheme()))return;publicUrl(url);for(InetAddress a:InetAddress.getAllByName(u.getHost())){byte[] bytes=a.getAddress();boolean uniqueLocal=bytes.length==16&&(bytes[0]&0xfe)==0xfc;if(uniqueLocal||a.isAnyLocalAddress()||a.isLoopbackAddress()||a.isLinkLocalAddress()||a.isSiteLocalAddress()||a.isMulticastAddress())throw new SecurityException("PRIVATE_NETWORK_BLOCKED");}}
   private void finishNavigation(String error){if(navigation!=null){Callback c=navigation;navigation=null;c.result(null,error);}state.browser(error);}
-  void execute(String method,JSONObject payload,Callback callback){long epoch=operationEpoch;main.post(()->{try{
+  void execute(String method,JSONObject payload,Callback completion){
+    long epoch=operationEpoch,started=SystemClock.elapsedRealtime();
+    java.util.concurrent.atomic.AtomicBoolean delivered=new java.util.concurrent.atomic.AtomicBoolean();
+    Runnable[] timeout=new Runnable[1];
+    Callback callback=(observation,error)->{
+      if(!delivered.compareAndSet(false,true))return;
+      main.removeCallbacks(timeout[0]);
+      if(observation!=null)try{observation.put("executionTrace",new JSONObject().put("method",method).put("elapsedMs",SystemClock.elapsedRealtime()-started).put("documentEpoch",observation.optLong("documentEpoch")).put("attempts",1));}catch(JSONException ignored){}
+      completion.result(observation,error);
+    };
+    timeout[0]=()->{if(!delivered.get()){if(epoch==operationEpoch)abort();callback.result(null,"COMMAND_TIMEOUT");}};main.postDelayed(timeout[0],35000);
+    main.post(()->{try{
     if(epoch!=operationEpoch){callback.result(null,"EXECUTION_ABORTED");return;}
     if(closed||web()==null){callback.result(null,"BROWSER_UNAVAILABLE");return;}
     if(state.snapshot().optString("control").equals("HUMAN")){callback.result(null,"HUMAN_CONTROL_ACTIVE");return;}
@@ -162,7 +176,7 @@ final class BrowserRuntime implements AutoCloseable {
   }
   interface MaskCallback {void done(JSONArray rects);}
   private void mask(WebView target,boolean enabled,MaskCallback done){String key=namespace+"_mask";
-    String script=enabled?"(()=>{let old=document.getElementById("+JSONObject.quote(key)+");if(old)old.remove();let root=document.createElement('div'),rects=[];root.id="+JSONObject.quote(key)+";for(let e of document.querySelectorAll('input[type=password],input[autocomplete=one-time-code],input[autocomplete=cc-number],input[autocomplete=cc-csc]')){let r=e.getBoundingClientRect();rects.push({x:r.x,y:r.y,w:r.width,h:r.height});let m=document.createElement('div');Object.assign(m.style,{position:'fixed',left:r.x+'px',top:r.y+'px',width:r.width+'px',height:r.height+'px',background:'#e5e5e5',zIndex:'2147483647',pointerEvents:'none'});root.appendChild(m);}document.documentElement.appendChild(root);return JSON.stringify({rects,width:innerWidth,height:innerHeight})})()":"document.getElementById("+JSONObject.quote(key)+")?.remove()";
+    String script=enabled?"(()=>{let old=document.getElementById("+JSONObject.quote(key)+");if(old)old.remove();let root=document.createElement('div'),rects=[];root.id="+JSONObject.quote(key)+";let scope=window["+JSONObject.quote(namespace)+"],scan=scope?.semantic?.scan();if(!scan||scan.truncated)return JSON.stringify({error:'REDACTION_SCAN_UNAVAILABLE'});for(let e of scan.nodes.filter(scope.semantic.sensitive)){let r=e.getBoundingClientRect();rects.push({x:r.x,y:r.y,w:r.width,h:r.height});let m=document.createElement('div');Object.assign(m.style,{position:'fixed',left:r.x+'px',top:r.y+'px',width:r.width+'px',height:r.height+'px',background:'#e5e5e5',zIndex:'2147483647',pointerEvents:'none'});root.appendChild(m);}document.documentElement.appendChild(root);return JSON.stringify({rects,width:innerWidth,height:innerHeight})})()":"document.getElementById("+JSONObject.quote(key)+")?.remove()";
     target.evaluateJavascript(script,v->{try{JSONObject data=new JSONObject(new JSONArray("["+v+"]").getString(0));JSONArray rects=data.getJSONArray("rects");double scale=target.getWidth()/data.getDouble("width");for(int i=0;i<rects.length();i++)rects.getJSONObject(i).put("scale",scale);done.done(rects);}catch(Exception e){if(!enabled)done.done(new JSONArray());else done.done(null);}});
   }
   private void capture(WebView target,JSONArray rects,JSONObject o,Callback callback){
@@ -197,8 +211,7 @@ final class BrowserRuntime implements AutoCloseable {
     Runnable run=()->observe(false,(before,error)->{if(epoch!=operationEpoch||closed||state.snapshot().optString("control").equals("HUMAN")){callback.result(null,"EXECUTION_ABORTED");return;}if(error!=null){callback.result(null,error);return;}
       try{
         switch(action){
-          case "fill":String script="(()=>{let e=window["+JSONObject.quote(selected)+"];if(!e?.isConnected)return 'STALE_REFERENCE';if(e.disabled||e.readOnly)return 'NOT_EDITABLE';if(!(e instanceof HTMLTextAreaElement||e instanceof HTMLInputElement&&/^(text|email|password|tel|url|number|search)$/.test(e.type)))return 'NOT_EDITABLE';let proto=e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,setter=Object.getOwnPropertyDescriptor(proto,'value')?.set;if(!setter)return 'UNSUPPORTED_FILL';e.focus();setter.call(e,"+JSONObject.quote(p.getString("text"))+");e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value==="+JSONObject.quote(p.getString("text"))+"?'OK':'FILL_NOT_APPLIED'})()";
-            web().evaluateJavascript(script,v->{if(!"\"OK\"".equals(v)){callback.result(null,v.contains("NOT_EDITABLE")?"NOT_EDITABLE":v.contains("STALE_REFERENCE")?"STALE_REFERENCE":"FILL_NOT_APPLIED");return;}afterAction(p,before,true,callback);});return;
+          case "fill":fillUntil(web(),epoch,SystemClock.elapsedRealtime()+3500,p,before,callback);return;
           case "click":long clickedAt=SystemClock.elapsedRealtime();waitForClick(epoch,SystemClock.elapsedRealtime()+3500,null,(rect,reason)->{
              if(reason!=null){callback.result(null,reason);return;}
              try{
@@ -211,8 +224,8 @@ final class BrowserRuntime implements AutoCloseable {
           case "back":if(!web().canGoBack()){callback.result(null,"HISTORY_UNAVAILABLE");return;}web().goBack();break;
           case "forward":if(!web().canGoForward()){callback.result(null,"HISTORY_UNAVAILABLE");return;}web().goForward();break;
           case "reload":web().reload();break;
-          case "scroll":String scroll="(()=>{let e=document.elementFromPoint(innerWidth/2,innerHeight/2);while(e&&e!==document.documentElement){let s=getComputedStyle(e);if((/(auto|scroll)/.test(s.overflowY)&&e.scrollHeight>e.clientHeight+2)||(/(auto|scroll)/.test(s.overflowX)&&e.scrollWidth>e.clientWidth+2)){e.scrollBy({left:"+p.getInt("x")+",top:"+p.getInt("y")+",behavior:'instant'});return true;}e=e.parentElement;}window.scrollBy({left:"+p.getInt("x")+",top:"+p.getInt("y")+",behavior:'instant'});return true})()";
-             web().evaluateJavascript(scroll,value->{if(!operationActive(epoch)){callback.result(null,"EXECUTION_ABORTED");return;}afterAction(p,before,false,callback);});return;
+          case "scroll":String scroll=scrollScript.replace("HEY_NAMESPACE",JSONObject.quote(namespace)).replace("HEY_SCROLL_X",String.valueOf(p.getDouble("x"))).replace("HEY_SCROLL_Y",String.valueOf(p.getDouble("y")));
+             web().evaluateJavascript(scroll,value->{if(!operationActive(epoch)){callback.result(null,"EXECUTION_ABORTED");return;}try{JSONObject moved=new JSONObject(new JSONArray("["+value+"]").getString(0));if(moved.has("error")){callback.result(null,moved.getString("error"));return;}p.put("scrollRegionId",moved.optString("regionId"));}catch(Exception e){callback.result(null,"SCROLL_EVALUATION_FAILED");return;}afterAction(p,before,false,callback);});return;
           case "drag":touch((float)p.getDouble("x"),(float)p.getDouble("y"),(float)p.getDouble("toX"),(float)p.getDouble("toY"));break;
           case "key":int key=switch(p.getString("value")){case "ENTER"->KeyEvent.KEYCODE_ENTER;case "TAB"->KeyEvent.KEYCODE_TAB;case "ESCAPE"->KeyEvent.KEYCODE_ESCAPE;default->throw new IllegalStateException("UNSUPPORTED_KEY");};web().dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,key));web().dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,key));break;
           case "tab_open":newTab(p.getString("url"));break;
@@ -223,23 +236,35 @@ final class BrowserRuntime implements AutoCloseable {
         afterAction(p,before,false,callback);
       }catch(Exception e){callback.result(null,error(e));}
     });
-    if(refAction)web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(namespace)+"]?.refs["+JSONObject.quote(p.getString("ref"))+"];if(!e)return 'REF_NOT_FOUND';if(!e.isConnected)return 'STALE_REFERENCE';window["+JSONObject.quote(selected)+"]=e;return 'OK'})()",v->{if("\"OK\"".equals(v))run.run();else callback.result(null,v.contains("REF_NOT_FOUND")?"REF_NOT_FOUND":"STALE_REFERENCE");});else run.run();
+    if(refAction)web().evaluateJavascript("(()=>{let scope=window["+JSONObject.quote(namespace)+"],e=scope?.refs["+JSONObject.quote(p.getString("ref"))+"];if(!e)return JSON.stringify({error:'REF_NOT_FOUND'});if(!e.isConnected)return JSON.stringify({error:'STALE_REFERENCE'});window["+JSONObject.quote(selected)+"]=e;return JSON.stringify({elementId:scope.semantic.identity(e)})})()",v->{try{if(!operationActive(epoch)){callback.result(null,"EXECUTION_ABORTED");return;}JSONObject selectedInfo=new JSONObject(new JSONArray("["+v+"]").getString(0));if(selectedInfo.has("error")){callback.result(null,selectedInfo.getString("error"));return;}p.put("targetElementId",selectedInfo.getString("elementId"));run.run();}catch(Exception e){callback.result(null,"STALE_REFERENCE");}});else run.run();
   }
   interface ClickReady{void done(JSONObject point,String error);}
+  private void fillUntil(WebView target,long epoch,long deadline,JSONObject p,JSONObject before,Callback callback){
+    if(!operationActive(epoch)||web()!=target){callback.result(null,"EXECUTION_ABORTED");return;}
+    String script=fillScript.replace("HEY_NAMESPACE",JSONObject.quote(namespace)).replace("HEY_TARGET",JSONObject.quote(namespace+"_target")).replace("HEY_VALUE",JSONObject.quote(p.optString("text")));
+    target.evaluateJavascript(script,value->{
+      if(!operationActive(epoch)||web()!=target){callback.result(null,"EXECUTION_ABORTED");return;}
+      String reason;
+      try{reason=new JSONArray("["+value+"]").getString(0);}catch(Exception e){callback.result(null,"FILL_EVALUATION_FAILED");return;}
+      if("OK".equals(reason)){afterAction(p,before,true,callback);return;}
+      if(Set.of("ELEMENT_HIDDEN","ELEMENT_DISABLED","NOT_EDITABLE").contains(reason)&&SystemClock.elapsedRealtime()<deadline){main.postDelayed(()->fillUntil(target,epoch,deadline,p,before,callback),160);return;}
+      callback.result(null,reason.matches("[A-Z_]{3,60}")?reason:"FILL_NOT_APPLIED");
+    });
+  }
   private void waitForClick(long epoch,long deadline,JSONObject previous,ClickReady callback){
     if(!operationActive(epoch)){callback.done(null,"EXECUTION_ABORTED");return;}
-    WebView target=web();String script=actionabilityScript.replace("HEY_TARGET",JSONObject.quote(namespace+"_target")).replace("HEY_WEB_WIDTH",String.valueOf(target.getWidth()));
+    WebView target=web();String script=actionabilityScript.replace("HEY_NAMESPACE",JSONObject.quote(namespace)).replace("HEY_TARGET",JSONObject.quote(namespace+"_target")).replace("HEY_WEB_WIDTH",String.valueOf(target.getWidth()));
     target.evaluateJavascript(script,value->{
       try{
         if(!operationActive(epoch)||web()!=target){callback.done(null,"EXECUTION_ABORTED");return;}
         JSONObject point=new JSONObject(new JSONArray("["+value+"]").getString(0));String reason=point.optString("error");
         if(reason.isEmpty()){
-          boolean stable=previous!=null&&Math.abs(previous.optDouble("x")-point.optDouble("x"))<1&&Math.abs(previous.optDouble("y")-point.optDouble("y"))<1;
+          boolean stable=previous!=null&&Math.abs(previous.optDouble("x")-point.optDouble("x"))<1&&Math.abs(previous.optDouble("y")-point.optDouble("y"))<1&&Math.abs(previous.optDouble("width")-point.optDouble("width"))<1&&Math.abs(previous.optDouble("height")-point.optDouble("height"))<1;
           if(stable){callback.done(point,null);return;}
           if(SystemClock.elapsedRealtime()<deadline){main.postDelayed(()->waitForClick(epoch,deadline,point,callback),110);return;}
           callback.done(null,"ELEMENT_NOT_STABLE");return;
         }
-        if("STALE_REFERENCE".equals(reason)||"ELEMENT_DISABLED".equals(reason)){callback.done(null,reason);return;}
+        if("STALE_REFERENCE".equals(reason)){callback.done(null,reason);return;}
         if(SystemClock.elapsedRealtime()>=deadline){callback.done(null,reason);return;}
         main.postDelayed(()->waitForClick(epoch,deadline,null,callback),160);
       }catch(Exception e){callback.done(null,"ACTIONABILITY_FAILED");}
@@ -250,7 +275,7 @@ final class BrowserRuntime implements AutoCloseable {
     Runnable[] wait=new Runnable[1];wait[0]=()->{if(epoch!=operationEpoch||closed||state.snapshot().optString("control").equals("HUMAN")){callback.result(null,"HUMAN_CONTROL_ACTIVE");return;}
       observe(false,(after,error)->{if(error!=null){callback.result(null,error);return;}boolean verified=BrowserVerifier.action(p,before,after,fillVerified);
         if(!verified&&SystemClock.elapsedRealtime()<deadline&&Set.of("tab_open","tab_activate","tab_close","back","forward","reload","click","key","scroll","drag").contains(p.optString("action"))){main.postDelayed(wait[0],200);return;}
-        observe(true,(result,failure)->{if(result==null){callback.result(null,failure);return;}if(p.optString("action").equals("fill")){web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(namespace+"_target")+"];return !!e?.isConnected && e.value==="+JSONObject.quote(p.optString("text"))+"})()",v->{try{result.put("postconditionVerified",v.equals("true")).put("postcondition","fill");}catch(Exception ignored){}callback.result(result,failure);});}else{try{result.put("postconditionVerified",verified).put("postcondition",p.optString("action"));if(p.has("actionabilityWaitMs"))result.put("actionabilityWaitMs",p.optLong("actionabilityWaitMs"));}catch(Exception ignored){}callback.result(result,failure);}});
+        observe(true,(result,failure)->{if(result==null){callback.result(null,failure);return;}if(p.optString("action").equals("fill")){web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(namespace+"_target")+"];return !!e?.isConnected && (e.isContentEditable?e.textContent:e.value)==="+JSONObject.quote(p.optString("text"))+"})()",v->{try{result.put("postconditionVerified",v.equals("true")).put("postcondition","fill");}catch(Exception ignored){}callback.result(result,failure);});}else{try{result.put("postconditionVerified",verified).put("postcondition",p.optString("action"));if(p.has("actionabilityWaitMs"))result.put("actionabilityWaitMs",p.optLong("actionabilityWaitMs"));}catch(Exception ignored){}callback.result(result,failure);}});
       });};main.postDelayed(wait[0],200);
   }
   private void media(JSONObject p,Callback callback)throws Exception {

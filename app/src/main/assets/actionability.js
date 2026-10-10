@@ -1,13 +1,15 @@
 (function(){
-  const el=window[HEY_TARGET];
-  if(!el||!el.isConnected)return JSON.stringify({error:'STALE_REFERENCE'});
-  if(el.matches(':disabled')||el.getAttribute('aria-disabled')==='true')return JSON.stringify({error:'ELEMENT_DISABLED'});
-  if(!el.getClientRects().length)return JSON.stringify({error:'ELEMENT_HIDDEN'});
-  for(let a=el;a&&a.nodeType===1;a=a.parentElement){const s=getComputedStyle(a);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse')return JSON.stringify({error:'ELEMENT_HIDDEN'});}
+  const el=window[HEY_TARGET],s=window[HEY_NAMESPACE]?.semantic;
+  if(!el?.isConnected||!s)return JSON.stringify({error:'STALE_REFERENCE'});
+  if(s.disabled(el))return JSON.stringify({error:'ELEMENT_DISABLED'});
+  if(!s.visible(el)||s.hidden(el))return JSON.stringify({error:'ELEMENT_HIDDEN'});
   el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
-  const r=el.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;
-  if(r.width<=0||r.height<=0||x<0||y<0||x>=innerWidth||y>=innerHeight)return JSON.stringify({error:'ELEMENT_OUTSIDE_VIEWPORT'});
-  const top=document.elementFromPoint(x,y);
-  if(!top||!(top===el||el.contains(top)))return JSON.stringify({error:'ELEMENT_OBSCURED'});
-  return JSON.stringify({x,y,scale:innerWidth?HEY_WEB_WIDTH/innerWidth:0,width:r.width,height:r.height});
-})()
+  const r=el.getBoundingClientRect(),left=Math.max(0,r.left),right=Math.min(innerWidth,r.right),top=Math.max(0,r.top),bottom=Math.min(innerHeight,r.bottom);
+  if(right<=left||bottom<=top)return JSON.stringify({error:'ELEMENT_OUTSIDE_VIEWPORT'});
+  // Use the visible intersection; a wide/clipped element may have an offscreen center.
+  const x=(left+right)/2,y=(top+bottom)/2,hit=s.hit(x,y);
+  if(!hit||!s.contains(el,hit))return JSON.stringify({error:'ELEMENT_OBSCURED'});
+  const scale=innerWidth?HEY_WEB_WIDTH/innerWidth:0;
+  if(!Number.isFinite(scale)||scale<=0)return JSON.stringify({error:'SURFACE_UNAVAILABLE'});
+  return JSON.stringify({x,y,scale,width:r.width,height:r.height,left:r.left,top:r.top});
+})();

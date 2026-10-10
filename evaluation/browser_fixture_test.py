@@ -11,6 +11,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 assets=Path(__file__).resolve().parents[1]/'app/src/main/assets'
+semantic=(assets/'semantic.js').read_text()
 locator=(assets/'locator.js').read_text()
 actionability=(assets/'actionability.js').read_text()
 
@@ -19,7 +20,7 @@ def locate(page,payload):
     js=locator.replace('HEY_NAMESPACE',quote('hey_fixture')).replace('HEY_QUERY',quote(quote(payload)))
     return json.loads(page.evaluate(js))
 def point(page):
-    js=actionability.replace('HEY_TARGET',quote('hey_target')).replace('HEY_WEB_WIDTH','720')
+    js=actionability.replace('HEY_TARGET',quote('hey_target')).replace('HEY_WEB_WIDTH','720').replace('HEY_NAMESPACE',quote('hey_fixture'))
     return json.loads(page.evaluate(js))
 
 with sync_playwright() as playwright:
@@ -31,7 +32,8 @@ with sync_playwright() as playwright:
     <button id="save" data-testid="save-btn">Simpan</button><button id="other">Batalkan</button>
     <div id="nested"><div id="space"></div><button id="far">Lanjutkan</button></div>
     <div id="cover"></div><div hidden><button>Hidden</button></div>''')
-    page.evaluate('window.hey_fixture={refs:{},nextRef:0}')
+    page.evaluate(semantic.replace('HEY_NAMESPACE',quote('hey_fixture')))
+    page.evaluate('window.hey_fixture.refs={};window.hey_fixture.nextRef=0')
     found=locate(page,{'by':'role','query':'button','name':'Simpan'})
     assert found['ref']=='l1' and found['locatorUnique'] and found['role']=='button', found
     assert locate(page,{'by':'label','query':'Alamat Email'})['tag']=='input'
