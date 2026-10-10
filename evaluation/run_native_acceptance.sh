@@ -11,6 +11,7 @@ run_variant() {
   local variant="$1"
   adb shell am force-stop id.ars.hey.preview
   adb shell am instrument -w -e variant "$variant" id.ars.hey.preview.test/id.ars.hey.NativeAcceptance | tee "evaluation/native-output/$variant-instrumentation.txt"
+  adb logcat -d -s AndroidRuntime > "evaluation/native-output/$variant-runtime.txt"
   adb exec-out run-as id.ars.hey.preview tar -cf - files/acceptance > "evaluation/native-output/$variant.tar"
   tar -xf "evaluation/native-output/$variant.tar" -C evaluation/native-output
   python3 - "$variant" <<'PY'

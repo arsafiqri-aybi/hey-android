@@ -42,6 +42,7 @@ final class BrowserRuntime implements AutoCloseable {
   private final ImageReader reader;private final VirtualDisplay display;private final Presentation presentation;private final FrameLayout container;
   private final LinkedHashMap<String,WebView> tabs=new LinkedHashMap<>();private String active="",version=UUID.randomUUID().toString(),namespace="hey_"+UUID.randomUUID().toString().replace("-","");
   private long operationEpoch;private boolean injectingInput;private FrameLayout visibleHost;private Activity visibleActivity;private final Map<WebView,MutableContextWrapper> contexts=new HashMap<>();private final Map<WebView,Long> epochs=new HashMap<>();
+  private final Set<WebView> failedPages=new HashSet<>();
   private String observer,locatorScript,actionabilityScript;private Callback navigation;private Bitmap frame;private long frameAt;private boolean screenshotPending,closed;private ValueCallback<Uri[]> fileCallback;
   BrowserRuntime(Context context,StateStore state,SecureStore store)throws Exception {
     this.context=context;this.state=state;this.store=store;
@@ -92,6 +93,7 @@ final class BrowserRuntime implements AutoCloseable {
     target.evaluateJavascript(script,result->done.accept(web()==target&&"true".equals(result)));
   }
   String currentUrl(){return web()==null?"":observedUrl(web().getUrl());}
+  boolean usable(){return !closed&&web()!=null;}
   void attachIfNeeded(Activity activity,FrameLayout host){if(visibleActivity!=activity||visibleHost!=host||web()!=null&&web().getParent()!=host)attach(activity,host);}
   boolean humanBack(){if(web()==null||!web().canGoBack())return false;humanPriority();restoreCache();invalidate();web().goBack();return true;}
   private WebView reloadTarget;private int previousCache;private Runnable cacheTimeout;
@@ -105,11 +107,11 @@ final class BrowserRuntime implements AutoCloseable {
     CookieManager.getInstance().setAcceptThirdPartyCookies(view,false);
     view.setWebViewClient(new WebViewClient(){
       @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){try{publicUrl(r.getUrl().toString());return false;}catch(Exception e){finishNavigation(error(e));return true;}}
-      @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){try{networkUrl(r.getUrl().toString());return null;}catch(Exception e){if(r.isForMainFrame())main.post(()->finishNavigation(error(e)));return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",Map.of(),new ByteArrayInputStream(new byte[0]));}}
-      @Override public void onPageStarted(WebView v,String url,Bitmap icon){epochs.put(v,epochs.getOrDefault(v,0L)+1);invalidate();state.browser("LOADING");}
-      @Override public void onPageFinished(WebView v,String url){if(v==reloadTarget)restoreCache();CookieManager.getInstance().flush();persistTabs();state.browser("READY");if(navigation!=null&&v==web()){Callback c=navigation;navigation=null;observe(true,c);}}
-      @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();finishNavigation("TLS_ERROR");}
-      @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame())finishNavigation("NAVIGATION_FAILED");}
+      @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){try{networkUrl(r.getUrl().toString());return null;}catch(Exception e){if(r.isForMainFrame())main.post(()->{if(v==web()){failedPages.add(v);finishNavigation(error(e));}});return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",Map.of(),new ByteArrayInputStream(new byte[0]));}}
+      @Override public void onPageStarted(WebView v,String url,Bitmap icon){epochs.put(v,epochs.getOrDefault(v,0L)+1);failedPages.remove(v);if(v==web()){invalidate();state.browser("LOADING");}}
+      @Override public void onPageFinished(WebView v,String url){if(v==reloadTarget)restoreCache();CookieManager.getInstance().flush();persistTabs();if(v!=web()||failedPages.contains(v))return;state.browser("READY");if(navigation!=null&&v==web()){Callback c=navigation;navigation=null;observe(true,c);}}
+      @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();failedPages.add(v);if(v==web())finishNavigation("TLS_ERROR");}
+      @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame()){failedPages.add(v);if(v==web())finishNavigation("NAVIGATION_FAILED");}}
       @Override public boolean onRenderProcessGone(WebView v,RenderProcessGoneDetail detail){finishNavigation("RENDERER_LOST");state.browser("RENDERER_LOST");detach(v);tabs.values().remove(v);contexts.remove(v);epochs.remove(v);v.destroy();return true;}
     });
     view.setWebChromeClient(new WebChromeClient(){

@@ -28,6 +28,7 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   private final RuntimeStartPolicy startPolicy = new RuntimeStartPolicy();
   private boolean visible;
   private int page;
+  private int renderedPage = -1;
   String expanded = "", taskSignature = "";
   TextView homeStatus,
       heroTitle,
@@ -58,13 +59,13 @@ public final class MainActivity extends Activity implements StateStore.Listener 
     getWindow().setStatusBarColor(ui.canvas);
     getWindow().setNavigationBarColor(ui.canvas);
     getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    build();
     getWindow()
         .getInsetsController()
         .setSystemBarsAppearance(
             0,
             WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
                 | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
-    build();
     pairIntent(getIntent());
   }
 
@@ -130,6 +131,13 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   }
 
   void render() {
+    int retainedScroll = 0;
+    if (renderedPage == page
+        && stage.getChildCount() > 0
+        && stage.getChildAt(0) instanceof ScrollView) {
+      retainedScroll = stage.getChildAt(0).getScrollY();
+    }
+    renderedPage = page;
     HeyService s = HeyService.current;
     if (s != null && s.browser != null && page != 1) s.browser.detach(this);
     stage.removeAllViews();
@@ -175,6 +183,8 @@ public final class MainActivity extends Activity implements StateStore.Listener 
         new HomeScreen(this).build();
     }
     update();
+    final int restoreY = retainedScroll;
+    scroll.post(() -> scroll.scrollTo(0, restoreY));
   }
 
   LinearLayout row() {
@@ -386,6 +396,9 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   }
 
   void startBrowser() {
+    HeyService service = HeyService.current;
+    if (service != null && service.browser != null && !service.browser.usable())
+      service.recoverBrowser();
     startRuntime(true);
   }
 

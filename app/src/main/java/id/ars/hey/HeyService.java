@@ -125,6 +125,7 @@ public final class HeyService extends Service implements StateStore.Listener {
     progress=new JSONObject();app.state.task("",new JSONObject());watchId=null;
     network.execute(()->{try{transport.send("/api/device/result",response,true);app.secure.remove("pendingResult");}catch(Exception e){if(!pausing)app.state.connection("OFFLINE","RESULT_UNACKNOWLEDGED");}finally{active=null;finishing=false;}});
   }
+  void recoverBrowser(){if(stopped||pausing||active!=null)return;try{if(browser!=null)browser.close();browser=new BrowserRuntime(this,app.state,app.secure);}catch(Exception e){browser=null;app.state.browser("RUNTIME_UNAVAILABLE");}}
   void stopAudio(){if(audio!=null){audio.close();audio=null;}app.state.audio("OFF");foreground(false);}
   void control(boolean human){app.state.control(human?"HUMAN":"AGENT");if(browser!=null)browser.abort();if(human&&active!=null)finish("UNKNOWN",false,new JSONObject(),"HUMAN_CONTROL_ACTIVE");}
   @Override public void onDestroy(){
