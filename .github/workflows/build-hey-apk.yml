@@ -1,31 +1,40 @@
 name: Build Hey Android APK
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Branch to compile into an APK'
+        required: true
+        type: string
+        default: 'feat/hey-home-ultra-compact-apk-20261010'
 permissions:
   contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
-      - name: Checkout feature branch
+      - name: Checkout selected source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
       - name: Install Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install SDK platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Use preinstalled Android SDK 35
+        run: |
+          echo "Android SDK: ${ANDROID_HOME}"
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
       - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
-      - name: Compile and test Hey
+      - name: Unit tests and APK build
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
-      - name: Android lint
+      - name: Run Android lint
         if: success()
         run: gradle --no-daemon :app:lintDebug
       - name: Upload installable debug APK
