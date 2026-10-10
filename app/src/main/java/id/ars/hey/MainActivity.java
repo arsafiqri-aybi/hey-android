@@ -20,7 +20,7 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   private final RuntimeStartPolicy startPolicy=new RuntimeStartPolicy();private boolean visible;private Button connectButton;private TextView runtimeDetail;
   private FrameLayout shell;private WebView homeView;private boolean homeLoaded,lowEffects;private Insets homeInsets=Insets.NONE;private String wallpaperAsset="wallpaper.webp";private LinearLayout root,content,nav;private TextView connection,detail,taskTitle,taskDetail,taskTime,taskCounts;private FrameLayout browserHost;private Button pauseButton;private TextView browserStatus,audioStatus;private Button audioButton;private String page="Home";private float downX,downY;
   private final int ink=Color.rgb(35,42,37),muted=Color.rgb(108,117,108),green=Color.rgb(51,82,61),background=Color.rgb(243,242,239);
-  @Override public void onCreate(Bundle state){super.onCreate(state);app=(HeyApp)getApplication();app.state.listen(this);getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);build();pairIntent(getIntent());}
+  @Override public void onCreate(Bundle state){setTheme(R.style.HeyTheme);super.onCreate(state);app=(HeyApp)getApplication();app.state.listen(this);getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);build();pairIntent(getIntent());}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);pairIntent(intent);}
   private int dp(float v){return (int)(getResources().getDisplayMetrics().density*v+.5f);}
   private GradientDrawable surface(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));d.setStroke(dp(1),Color.argb(18,40,58,45));return d;}
@@ -35,7 +35,7 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   private void build(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(background);root.setPadding(dp(20),dp(18),dp(20),dp(12));shell=new FrameLayout(this);shell.addView(root,new FrameLayout.LayoutParams(-1,-1));
     root.setOnApplyWindowInsetsListener((v,insets)->{Insets i=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(dp(20)+i.left,dp(12)+i.top,dp(20)+i.right,dp(8)+i.bottom);return insets;});
-    LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);TextView wordmark=text("Hey",31,ink,true);header.addView(wordmark);TextView by=text("  by Ars",13,muted,false);header.addView(by);root.addView(header);space(root,16);
+    LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);ImageView wordmark=new ImageView(this);wordmark.setImageResource(R.drawable.ic_hey);wordmark.setContentDescription("Hey.");header.addView(wordmark,new LinearLayout.LayoutParams(dp(44),dp(44)));TextView by=text("  by Ars",13,muted,false);header.addView(by);root.addView(header);space(root,16);
     ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     nav=new LinearLayout(this);nav.setPadding(dp(4),dp(4),dp(4),dp(4));nav.setBackground(surface(Color.rgb(230,233,226),20));root.addView(nav,new LinearLayout.LayoutParams(-1,dp(56)));createHomeView();setContentView(shell);render();
   }
@@ -184,4 +184,3 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   @Override protected void onPause(){visible=false;if(homeView!=null){if(homeLoaded)homeView.evaluateJavascript("window.heySetActive&&window.heySetActive(false);",null);homeView.onPause();}main.removeCallbacks(surfaceTick);HeyService s=HeyService.current;if(s!=null&&s.browser!=null)s.browser.detach(this);super.onPause();}
   @Override protected void onDestroy(){if(homeView!=null){shell.removeView(homeView);homeView.destroy();}app.state.unlisten(this);main.removeCallbacksAndMessages(null);network.shutdownNow();super.onDestroy();}
 }
-

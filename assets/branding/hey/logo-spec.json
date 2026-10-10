@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "canvas": 1000,
+  "corner_radius": 240,
+  "text_bounds": [
+    150,
+    346,
+    870,
+    706.9756097560976
+  ],
+  "text_width": 720,
+  "text_scale": 0.975609756097561,
+  "baseline_y": 619.1707317073171,
+  "dot_diameter": 58.53658536585366,
+  "dot_center": [
+    840.7317073170732,
+    589.9024390243902
+  ],
+  "adaptive": {
+    "canvas": 108,
+    "visible_viewport": 72,
+    "text_bounds": [
+      25,
+      41,
+      84,
+      70.57994579945799
+    ],
+    "safe_circle_center": [
+      54,
+      54
+    ],
+    "safe_circle_diameter": 66
+  },
+  "splash": {
+    "canvas": 288,
+    "safe_circle_diameter": 192,
+    "text_width": 170,
+    "offset": [
+      61,
+      107
+    ]
+  }
+}
