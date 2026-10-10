@@ -42,10 +42,10 @@ final class BrowserRuntime implements AutoCloseable {
   private final ImageReader reader;private final VirtualDisplay display;private final Presentation presentation;private final FrameLayout container;
   private final LinkedHashMap<String,WebView> tabs=new LinkedHashMap<>();private String active="",version=UUID.randomUUID().toString(),namespace="hey_"+UUID.randomUUID().toString().replace("-","");
   private long operationEpoch;private boolean injectingInput;private FrameLayout visibleHost;private Activity visibleActivity;private final Map<WebView,MutableContextWrapper> contexts=new HashMap<>();private final Map<WebView,Long> epochs=new HashMap<>();
-  private String observer;private Callback navigation;private Bitmap frame;private long frameAt;private boolean screenshotPending,closed;private ValueCallback<Uri[]> fileCallback;
+  private String observer,locatorScript,actionabilityScript;private Callback navigation;private Bitmap frame;private long frameAt;private boolean screenshotPending,closed;private ValueCallback<Uri[]> fileCallback;
   BrowserRuntime(Context context,StateStore state,SecureStore store)throws Exception {
     this.context=context;this.state=state;this.store=store;
-    try(InputStream in=context.getAssets().open("observe.js")){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] chunk=new byte[4096];int n;while((n=in.read(chunk))!=-1)out.write(chunk,0,n);observer=out.toString("UTF-8");}
+    observer=loadAsset("observe.js");locatorScript=loadAsset("locator.js");actionabilityScript=loadAsset("actionability.js");
     WebView.setWebContentsDebuggingEnabled(false);
     reader=ImageReader.newInstance(720,1280,PixelFormat.RGBA_8888,2);
     DisplayManager dm=context.getSystemService(DisplayManager.class);
@@ -57,9 +57,15 @@ final class BrowserRuntime implements AutoCloseable {
     JSONArray saved=new JSONArray(store.get("tabs","[]"));if(saved.length()==0)newTab("https://example.com");else for(int i=0;i<Math.min(saved.length(),8);i++)newTab(saved.getString(i));
     state.browser("READY");
   }
+  private String loadAsset(String name)throws Exception{try(InputStream in=context.getAssets().open(name)){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] chunk=new byte[4096];int n;while((n=in.read(chunk))!=-1)out.write(chunk,0,n);return out.toString("UTF-8");}}
   private final class ControlledWebView extends WebView {
     ControlledWebView(Context context){super(context);}
-    @Override public boolean dispatchTouchEvent(MotionEvent event){if(!injectingInput&&!state.snapshot().optString("control").equals("HUMAN"))return true;return super.dispatchTouchEvent(event);}
+    @Override public boolean dispatchTouchEvent(MotionEvent event){
+      if(!injectingInput&&!state.snapshot().optString("control").equals("HUMAN"))return true;
+      // During HUMAN takeover swipes belong to this WebView, never the outer app ScrollView.
+      if(!injectingInput&&getParent()!=null){int a=event.getActionMasked();if(a==MotionEvent.ACTION_DOWN)getParent().requestDisallowInterceptTouchEvent(true);else if(a==MotionEvent.ACTION_UP||a==MotionEvent.ACTION_CANCEL)getParent().requestDisallowInterceptTouchEvent(false);}
+      return super.dispatchTouchEvent(event);
+    }
     @Override public boolean performAccessibilityAction(int action,Bundle args){if(!state.snapshot().optString("control").equals("HUMAN"))return false;return super.performAccessibilityAction(action,args);}
   }
   private WebView web(){return tabs.get(active);}
@@ -105,6 +111,7 @@ final class BrowserRuntime implements AutoCloseable {
     switch(method){
       case "navigate":publicUrl(payload.getString("url"));navigation=callback;web().loadUrl(payload.getString("url"));main.postDelayed(()->{if(navigation==callback)finishNavigation("NAVIGATION_TIMEOUT");},30000);break;
       case "observe":observe(payload.optBoolean("screenshot",true),callback);break;
+      case "locate":locate(payload,callback);break;
       case "action":action(payload,callback);break;
       case "media":media(payload,callback);break;
       default:callback.result(null,"UNSUPPORTED_METHOD");
@@ -126,6 +133,33 @@ final class BrowserRuntime implements AutoCloseable {
       mask(target,true,rects->{target.postVisualStateCallback(SystemClock.uptimeMillis(),new WebView.VisualStateCallback(){@Override public void onComplete(long requestId){capture(target,rects,observation,callback);}});});
     }catch(Exception e){callback.result(null,"OBSERVATION_FAILED");}});
   }
+  // The search is read-only. Its result holds an ephemeral ref in this same WebView and stateVersion.
+  // Polling handles late-rendered controls; a missing/ambiguous element never triggers a guessed click.
+  private void locate(JSONObject query,Callback callback){
+    long epoch=operationEpoch;WebView target=web();
+    observe(false,(before,error)->{
+      if(error!=null){callback.result(null,error);return;}
+      if(!operationActive(epoch)||target!=web()){callback.result(null,"OBSERVATION_REPLACED");return;}
+      locateUntil(query,before,epoch,target,SystemClock.elapsedRealtime()+3500,callback);
+    });
+  }
+  private void locateUntil(JSONObject query,JSONObject before,long epoch,WebView target,long deadline,Callback callback){
+    if(!operationActive(epoch)||target!=web()||!version.equals(before.optString("stateVersion"))){callback.result(null,"STALE_REFERENCE");return;}
+    String script=locatorScript.replace("HEY_NAMESPACE",JSONObject.quote(namespace)).replace("HEY_QUERY",JSONObject.quote(query.toString()));
+    target.evaluateJavascript(script,value->{
+      try{
+        if(!operationActive(epoch)||target!=web()||!version.equals(before.optString("stateVersion"))){callback.result(null,"STALE_REFERENCE");return;}
+        JSONObject match=new JSONObject(new JSONArray("["+value+"]").getString(0));
+        String reason=match.optString("error");
+        if("ELEMENT_NOT_FOUND".equals(reason)&&SystemClock.elapsedRealtime()<deadline){
+          main.postDelayed(()->locateUntil(query,before,epoch,target,deadline,callback),180);return;
+        }
+        if(!reason.isEmpty()){callback.result(null,reason);return;}
+        before.put("locator",match).put("postconditionVerified",match.optBoolean("locatorUnique"));
+        callback.result(before,null);
+      }catch(Exception e){callback.result(null,"LOCATOR_EVALUATION_FAILED");}
+    });
+  }
   interface MaskCallback {void done(JSONArray rects);}
   private void mask(WebView target,boolean enabled,MaskCallback done){String key=namespace+"_mask";
     String script=enabled?"(()=>{let old=document.getElementById("+JSONObject.quote(key)+");if(old)old.remove();let root=document.createElement('div'),rects=[];root.id="+JSONObject.quote(key)+";for(let e of document.querySelectorAll('input[type=password],input[autocomplete=one-time-code],input[autocomplete=cc-number],input[autocomplete=cc-csc]')){let r=e.getBoundingClientRect();rects.push({x:r.x,y:r.y,w:r.width,h:r.height});let m=document.createElement('div');Object.assign(m.style,{position:'fixed',left:r.x+'px',top:r.y+'px',width:r.width+'px',height:r.height+'px',background:'#e5e5e5',zIndex:'2147483647',pointerEvents:'none'});root.appendChild(m);}document.documentElement.appendChild(root);return JSON.stringify({rects,width:innerWidth,height:innerHeight})})()":"document.getElementById("+JSONObject.quote(key)+")?.remove()";
@@ -137,13 +171,23 @@ final class BrowserRuntime implements AutoCloseable {
     int width=target.getWidth(),height=target.getHeight();if(width<=0||height<=0){captureDone(target,null,rects,"SURFACE_UNAVAILABLE",o,callback);return;}
     Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);int[] xy=new int[2];target.getLocationInWindow(xy);Rect visible=new Rect();if(visibleActivity!=null&&(!target.getGlobalVisibleRect(visible)||visible.width()!=width||visible.height()!=height)){bitmap.recycle();captureDocument(target,rects,o,callback);return;}
     android.view.Window window=visibleActivity!=null?visibleActivity.getWindow():presentation.getWindow();
-    try{PixelCopy.request(window,new Rect(xy[0],xy[1],xy[0]+width,xy[1]+height),bitmap,result->{if(result==PixelCopy.SUCCESS)captureDone(target,bitmap,rects,"COMPOSITED_SURFACE",o,callback);else{bitmap.recycle();captureDocument(target,rects,o,callback);}},main);}catch(Exception e){bitmap.recycle();captureDocument(target,rects,o,callback);}
+    try{PixelCopy.request(window,new Rect(xy[0],xy[1],xy[0]+width,xy[1]+height),bitmap,result->{if(result==PixelCopy.SUCCESS&&hasVisualDetail(bitmap))captureDone(target,bitmap,rects,"COMPOSITED_SURFACE",o,callback);else{bitmap.recycle();captureDocument(target,rects,o,callback);}},main);}catch(Exception e){bitmap.recycle();captureDocument(target,rects,o,callback);}
+  }
+  // A flat/blank PixelCopy is not trusted as a captured webpage; canvas is only a fallback.
+  private static boolean hasVisualDetail(Bitmap image){
+    if(image==null||image.getWidth()<2||image.getHeight()<2)return false;
+    int first=image.getPixel(0,0)&0x00ffffff;
+    for(int row=0;row<9;row++)for(int col=0;col<9;col++){
+      int px=image.getPixel(col*(image.getWidth()-1)/8,row*(image.getHeight()-1)/8)&0x00ffffff;
+      if(Math.abs((px&255)-(first&255))+Math.abs(((px>>8)&255)-((first>>8)&255))+Math.abs(((px>>16)&255)-((first>>16)&255))>36)return true;
+    }
+    return false;
   }
   private void captureDocument(WebView target,JSONArray rects,JSONObject o,Callback callback){
     try{Bitmap bitmap=Bitmap.createBitmap(target.getWidth(),target.getHeight(),Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);target.draw(canvas);captureDone(target,bitmap,rects,"DOCUMENT_CANVAS",o,callback);}catch(Exception e){captureDone(target,null,rects,"CAPTURE_FAILED",o,callback);}
   }
   private void captureDone(WebView target,Bitmap bitmap,JSONArray rects,String mode,JSONObject o,Callback callback){
-    try{if(bitmap!=null&&web()==target&&!closed){Canvas canvas=new Canvas(bitmap);Paint paint=new Paint();paint.setColor(0xffe5e5e5);for(int i=0;i<rects.length();i++){JSONObject r=rects.getJSONObject(i);float k=(float)r.getDouble("scale");canvas.drawRect((float)r.getDouble("x")*k-2,(float)r.getDouble("y")*k-2,(float)(r.getDouble("x")+r.getDouble("w"))*k+2,(float)(r.getDouble("y")+r.getDouble("h"))*k+2,paint);}ByteArrayOutputStream bytes=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,65,bytes);o.put("image",new JSONObject().put("mimeType","image/jpeg").put("data",Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP))).put("screenshotStatus","MASKED").put("captureMode",mode).put("visualMediaVerified",mode.equals("COMPOSITED_SURFACE")).put("frameAt",System.currentTimeMillis());}else o.put("screenshotStatus","UNAVAILABLE").put("captureMode",mode);}catch(Exception e){try{o.remove("image");o.put("screenshotStatus","ERROR");}catch(Exception ignored){}}finally{if(bitmap!=null)bitmap.recycle();}
+    try{if(bitmap!=null&&web()==target&&!closed){Canvas canvas=new Canvas(bitmap);Paint paint=new Paint();paint.setColor(0xffe5e5e5);for(int i=0;i<rects.length();i++){JSONObject r=rects.getJSONObject(i);float k=(float)r.getDouble("scale");canvas.drawRect((float)r.getDouble("x")*k-2,(float)r.getDouble("y")*k-2,(float)(r.getDouble("x")+r.getDouble("w"))*k+2,(float)(r.getDouble("y")+r.getDouble("h"))*k+2,paint);}ByteArrayOutputStream bytes=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,65,bytes);o.put("image",new JSONObject().put("mimeType","image/jpeg").put("data",Base64.encodeToString(bytes.toByteArray(),Base64.NO_WRAP))).put("screenshotStatus",hasVisualDetail(bitmap)?"MASKED":"SUSPECT_BLANK").put("captureMode",mode).put("visualMediaVerified",mode.equals("COMPOSITED_SURFACE")&&hasVisualDetail(bitmap)).put("frameAt",System.currentTimeMillis());}else o.put("screenshotStatus","UNAVAILABLE").put("captureMode",mode);}catch(Exception e){try{o.remove("image");o.put("screenshotStatus","ERROR");}catch(Exception ignored){}}finally{if(bitmap!=null)bitmap.recycle();}
     mask(target,false,r->callback.result(o,null));
   }
   private void action(JSONObject p,Callback callback)throws Exception {
@@ -153,13 +197,22 @@ final class BrowserRuntime implements AutoCloseable {
     Runnable run=()->observe(false,(before,error)->{if(epoch!=operationEpoch||closed||state.snapshot().optString("control").equals("HUMAN")){callback.result(null,"EXECUTION_ABORTED");return;}if(error!=null){callback.result(null,error);return;}
       try{
         switch(action){
-          case "fill":String script="(()=>{let e=window["+JSONObject.quote(selected)+"];if(!e?.isConnected)return 'STALE_REFERENCE';if(e.disabled)return 'DISABLED';let proto=e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,setter=Object.getOwnPropertyDescriptor(proto,'value')?.set;if(!setter)return 'UNSUPPORTED_FILL';e.focus();setter.call(e,"+JSONObject.quote(p.getString("text"))+");e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value==="+JSONObject.quote(p.getString("text"))+"?'OK':'FILL_NOT_APPLIED'})()";
+          case "fill":String script="(()=>{let e=window["+JSONObject.quote(selected)+"];if(!e?.isConnected)return 'STALE_REFERENCE';if(e.disabled||e.readOnly)return 'NOT_EDITABLE';if(!(e instanceof HTMLTextAreaElement||e instanceof HTMLInputElement&&/^(text|email|password|tel|url|number|search)$/.test(e.type)))return 'NOT_EDITABLE';let proto=e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,setter=Object.getOwnPropertyDescriptor(proto,'value')?.set;if(!setter)return 'UNSUPPORTED_FILL';e.focus();setter.call(e,"+JSONObject.quote(p.getString("text"))+");e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value==="+JSONObject.quote(p.getString("text"))+"?'OK':'FILL_NOT_APPLIED'})()";
             web().evaluateJavascript(script,v->{if(!"\"OK\"".equals(v)){callback.result(null,"FILL_NOT_APPLIED");return;}afterAction(p,before,true,callback);});return;
-          case "click":web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(selected)+"];if(!e?.isConnected)return JSON.stringify({error:'STALE_REFERENCE'});if(e.disabled)return JSON.stringify({error:'DISABLED'});let r=e.getBoundingClientRect();if(r.x+r.width/2<0||r.y+r.height/2<0||r.x+r.width/2>=innerWidth||r.y+r.height/2>=innerHeight)return JSON.stringify({error:'ELEMENT_OUTSIDE_VIEWPORT'});return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2,scale:"+web().getWidth()+"/innerWidth})})()",v->{try{if(epoch!=operationEpoch)return;JSONObject rect=new JSONObject(new JSONArray("["+v+"]").getString(0));if(rect.has("error")){callback.result(null,rect.getString("error"));return;}touch((float)(rect.getDouble("x")*rect.getDouble("scale")),(float)(rect.getDouble("y")*rect.getDouble("scale")),(float)(rect.getDouble("x")*rect.getDouble("scale")),(float)(rect.getDouble("y")*rect.getDouble("scale")));afterAction(p,before,false,callback);}catch(Exception e){callback.result(null,error(e));}});return;
+          case "click":long clickedAt=SystemClock.elapsedRealtime();waitForClick(epoch,SystemClock.elapsedRealtime()+3500,null,(rect,reason)->{
+             if(reason!=null){callback.result(null,reason);return;}
+             try{
+               if(!operationActive(epoch)){callback.result(null,"EXECUTION_ABORTED");return;}
+               float x=(float)(rect.getDouble("x")*rect.getDouble("scale")),y=(float)(rect.getDouble("y")*rect.getDouble("scale"));
+               touch(x,y,x,y);p.put("actionabilityWaitMs",SystemClock.elapsedRealtime()-clickedAt);
+               afterAction(p,before,false,callback);
+             }catch(Exception e){callback.result(null,error(e));}
+           });return;
           case "back":if(!web().canGoBack()){callback.result(null,"HISTORY_UNAVAILABLE");return;}web().goBack();break;
           case "forward":if(!web().canGoForward()){callback.result(null,"HISTORY_UNAVAILABLE");return;}web().goForward();break;
           case "reload":web().reload();break;
-          case "scroll":web().scrollBy(p.getInt("x"),p.getInt("y"));break;
+          case "scroll":String scroll="(()=>{let e=document.elementFromPoint(innerWidth/2,innerHeight/2);while(e&&e!==document.documentElement){let s=getComputedStyle(e);if((/(auto|scroll)/.test(s.overflowY)&&e.scrollHeight>e.clientHeight+2)||(/(auto|scroll)/.test(s.overflowX)&&e.scrollWidth>e.clientWidth+2)){e.scrollBy({left:"+p.getInt("x")+",top:"+p.getInt("y")+",behavior:'instant'});return true;}e=e.parentElement;}window.scrollBy({left:"+p.getInt("x")+",top:"+p.getInt("y")+",behavior:'instant'});return true})()";
+             web().evaluateJavascript(scroll,value->{if(!operationActive(epoch)){callback.result(null,"EXECUTION_ABORTED");return;}afterAction(p,before,false,callback);});return;
           case "drag":touch((float)p.getDouble("x"),(float)p.getDouble("y"),(float)p.getDouble("toX"),(float)p.getDouble("toY"));break;
           case "key":int key=switch(p.getString("value")){case "ENTER"->KeyEvent.KEYCODE_ENTER;case "TAB"->KeyEvent.KEYCODE_TAB;case "ESCAPE"->KeyEvent.KEYCODE_ESCAPE;default->throw new IllegalStateException("UNSUPPORTED_KEY");};web().dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,key));web().dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,key));break;
           case "tab_open":newTab(p.getString("url"));break;
@@ -172,12 +225,32 @@ final class BrowserRuntime implements AutoCloseable {
     });
     if(refAction)web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(namespace)+"]?.refs["+JSONObject.quote(p.getString("ref"))+"];if(!e)return 'REF_NOT_FOUND';if(!e.isConnected)return 'STALE_REFERENCE';window["+JSONObject.quote(selected)+"]=e;return 'OK'})()",v->{if("\"OK\"".equals(v))run.run();else callback.result(null,v.contains("REF_NOT_FOUND")?"REF_NOT_FOUND":"STALE_REFERENCE");});else run.run();
   }
+  interface ClickReady{void done(JSONObject point,String error);}
+  private void waitForClick(long epoch,long deadline,JSONObject previous,ClickReady callback){
+    if(!operationActive(epoch)){callback.done(null,"EXECUTION_ABORTED");return;}
+    WebView target=web();String script=actionabilityScript.replace("HEY_TARGET",JSONObject.quote(namespace+"_target")).replace("HEY_WEB_WIDTH",String.valueOf(target.getWidth()));
+    target.evaluateJavascript(script,value->{
+      try{
+        if(!operationActive(epoch)||web()!=target){callback.done(null,"EXECUTION_ABORTED");return;}
+        JSONObject point=new JSONObject(new JSONArray("["+value+"]").getString(0));String reason=point.optString("error");
+        if(reason.isEmpty()){
+          boolean stable=previous!=null&&Math.abs(previous.optDouble("x")-point.optDouble("x"))<1&&Math.abs(previous.optDouble("y")-point.optDouble("y"))<1;
+          if(stable){callback.done(point,null);return;}
+          if(SystemClock.elapsedRealtime()<deadline){main.postDelayed(()->waitForClick(epoch,deadline,point,callback),110);return;}
+          callback.done(null,"ELEMENT_NOT_STABLE");return;
+        }
+        if("STALE_REFERENCE".equals(reason)||"ELEMENT_DISABLED".equals(reason)){callback.done(null,reason);return;}
+        if(SystemClock.elapsedRealtime()>=deadline){callback.done(null,reason);return;}
+        main.postDelayed(()->waitForClick(epoch,deadline,null,callback),160);
+      }catch(Exception e){callback.done(null,"ACTIONABILITY_FAILED");}
+    });
+  }
   private void afterAction(JSONObject p,JSONObject before,boolean fillVerified,Callback callback){
     long epoch=operationEpoch;invalidate();long deadline=SystemClock.elapsedRealtime()+5000;
     Runnable[] wait=new Runnable[1];wait[0]=()->{if(epoch!=operationEpoch||closed||state.snapshot().optString("control").equals("HUMAN")){callback.result(null,"HUMAN_CONTROL_ACTIVE");return;}
       observe(false,(after,error)->{if(error!=null){callback.result(null,error);return;}boolean verified=BrowserVerifier.action(p,before,after,fillVerified);
-        if(!verified&&SystemClock.elapsedRealtime()<deadline&&Set.of("tab_open","back","forward","reload","click").contains(p.optString("action"))){main.postDelayed(wait[0],200);return;}
-        observe(true,(result,failure)->{if(result==null){callback.result(null,failure);return;}if(p.optString("action").equals("fill")){web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(namespace+"_target")+"];return !!e?.isConnected && e.value==="+JSONObject.quote(p.optString("text"))+"})()",v->{try{result.put("postconditionVerified",v.equals("true")).put("postcondition","fill");}catch(Exception ignored){}callback.result(result,failure);});}else{try{result.put("postconditionVerified",verified).put("postcondition",p.optString("action"));}catch(Exception ignored){}callback.result(result,failure);}});
+        if(!verified&&SystemClock.elapsedRealtime()<deadline&&Set.of("tab_open","tab_activate","tab_close","back","forward","reload","click","key","scroll","drag").contains(p.optString("action"))){main.postDelayed(wait[0],200);return;}
+        observe(true,(result,failure)->{if(result==null){callback.result(null,failure);return;}if(p.optString("action").equals("fill")){web().evaluateJavascript("(()=>{let e=window["+JSONObject.quote(namespace+"_target")+"];return !!e?.isConnected && e.value==="+JSONObject.quote(p.optString("text"))+"})()",v->{try{result.put("postconditionVerified",v.equals("true")).put("postcondition","fill");}catch(Exception ignored){}callback.result(result,failure);});}else{try{result.put("postconditionVerified",verified).put("postcondition",p.optString("action"));if(p.has("actionabilityWaitMs"))result.put("actionabilityWaitMs",p.optLong("actionabilityWaitMs"));}catch(Exception ignored){}callback.result(result,failure);}});
       });};main.postDelayed(wait[0],200);
   }
   private void media(JSONObject p,Callback callback)throws Exception {

@@ -88,7 +88,7 @@ public final class HeyService extends Service implements StateStore.Listener {
       });
     }catch(Exception e){finish("ERROR",false,new JSONObject(),"JOURNAL_PERSIST_FAILED");}
   }
-  private boolean verifyCommand(JSONObject cmd,JSONObject o){return switch(cmd.optString("method")){case "observe"->true;case "navigate"->BrowserVerifier.navigation(cmd.optJSONObject("payload").optString("url"),o);case "action","media"->o.optBoolean("postconditionVerified",false);default->false;};}
+  private boolean verifyCommand(JSONObject cmd,JSONObject o){return switch(cmd.optString("method")){case "observe"->true;case "locate"->o.optJSONObject("locator")!=null&&o.optJSONObject("locator").optBoolean("locatorUnique");case "navigate"->BrowserVerifier.navigation(cmd.optJSONObject("payload").optString("url"),o);case "action","media"->o.optBoolean("postconditionVerified",false);default->false;};}
   private static JSONObject withoutMedia(JSONObject source)throws Exception{JSONObject copy=new JSONObject(source.toString());copy.remove("image");copy.remove("audio");return copy;}
   private void sendEvidence(JSONObject cmd,JSONObject o,int seq)throws Exception{
     JSONObject sound=o.optJSONObject("audio");if(sound!=null){JSONObject metadata=new JSONObject(sound.toString());metadata.remove("data");metadata.remove("mimeType");o.put("audioMetadata",metadata);o.put("audio",new JSONObject().put("mimeType",sound.getString("mimeType")).put("data",sound.getString("data")));}
