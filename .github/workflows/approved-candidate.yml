@@ -33,14 +33,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Native screenshots and gesture acceptance
-        uses: reactivecircus/android-emulator-runner@ed009f5318f15b1cf93a191b856c4f1748a2d4c1
-        with:
-          api-level: 31
-          target: google_apis
-          arch: x86_64
-          disable-animations: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash evaluation/run_native_acceptance.sh
+        run: bash evaluation/start_ci_emulator.sh
       - name: Upload candidate and evidence
         if: always()
         uses: actions/upload-artifact@v4
