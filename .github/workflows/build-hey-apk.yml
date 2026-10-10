@@ -27,7 +27,13 @@ jobs:
       - name: Use preinstalled Android SDK 35
         run: |
           echo "Android SDK: ${ANDROID_HOME}"
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          if [ -d "${ANDROID_HOME}/platforms/android-35" ] && [ -d "${ANDROID_HOME}/build-tools/35.0.0" ]; then
+            echo "SDK 35 and build-tools 35.0.0 already available"
+          else
+            SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -path '*/bin/sdkmanager' -type f | head -n 1)"
+            if [ -z "${SDKMANAGER}" ]; then echo "SDK manager not found"; exit 1; fi
+            "${SDKMANAGER}" --install "platforms;android-35" "build-tools;35.0.0"
+          fi
       - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
