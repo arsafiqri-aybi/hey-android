@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-11",
+  "repository": "arsafiqri-aybi/hey-android",
+  "integration": "Hey. logo system v1.0",
+  "main": {
+    "branch": "main",
+    "sha": "081d55c0b5f397bb06c52137b778dfd2bd0e54b7",
+    "apk_sha256": "e5bfaf99f6b50661b497ca63b8c7de4a18ea88f0aa44a167ce57cdaf3f8b3cb4",
+    "apk_bytes": 8820903,
+    "compiled_icon_entries": [
+      "res/drawable/ic_hey.xml",
+      "res/drawable/ic_hey_notification.xml",
+      "res/drawable/ic_launcher_background.xml",
+      "res/drawable/ic_launcher_foreground.xml",
+      "res/drawable/ic_launcher_monochrome.xml",
+      "res/drawable/ic_splash_logo.xml",
+      "res/mipmap-anydpi-v26/ic_launcher.xml",
+      "res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "res/mipmap-anydpi-v33/ic_launcher.xml",
+      "res/mipmap-anydpi-v33/ic_launcher_round.xml"
+    ],
+    "apk_zip_integrity": "PASS",
+    "device_test": "NOT_RUN",
+    "build_run": 38090523299,
+    "workflow_checkout_sha": "081d55c0b5f397bb06c52137b778dfd2bd0e54b7",
+    "unit_tests": "PASS",
+    "assembleDebug": "PASS",
+    "lintDebug": "PASS"
+  },
+  "pearl": {
+    "branch": "Pearl",
+    "sha": "192634ac43dd41026b5879df2578de01e772259c",
+    "apk_sha256": "f8bbef520c5e3bfb6ee5bfa9ccdafe968e166344abb5202ee004552c1b334632",
+    "apk_bytes": 20474742,
+    "packaged_logo_matches_master": true,
+    "compiled_icon_entries": [
+      "res/drawable/ic_hey.xml",
+      "res/drawable/ic_hey_notification.xml",
+      "res/drawable/ic_launcher_background.xml",
+      "res/drawable/ic_launcher_foreground.xml",
+      "res/drawable/ic_launcher_monochrome.xml",
+      "res/drawable/ic_splash_logo.xml",
+      "res/mipmap-anydpi-v26/ic_launcher.xml",
+      "res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "res/mipmap-anydpi-v33/ic_launcher.xml",
+      "res/mipmap-anydpi-v33/ic_launcher_round.xml"
+    ],
+    "device_test": "NOT_RUN",
+    "build_run": 38090608707,
+    "workflow_checkout_sha": "192634ac43dd41026b5879df2578de01e772259c",
+    "unit_tests_including_logo_offline_policy": "PASS",
+    "assembleDebug": "PASS",
+    "lintDebug": "PASS"
+  },
+  "device_appearance": "NOT_RUN",
+  "limits": [
+    "System mask/tints depend on launcher",
+    "No on-device cold launch or notification screenshots were taken",
+    "Browser/background/wake/audio gates are unchanged"
+  ]
+}
