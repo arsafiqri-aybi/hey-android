@@ -89,7 +89,7 @@ final class BrowserRuntime implements AutoCloseable {
   }
   void checkGesture(float x,float y,java.util.function.Consumer<Boolean> done){
     WebView target=web();if(target==null||closed||target.getWidth()==0){done.accept(false);return;}
-    String script="(()=>{let e=document.elementFromPoint("+(x/target.getResources().getDisplayMetrics().density)+","+(y/target.getResources().getDisplayMetrics().density)+");if(!e)return false;for(;e&&e!==document.documentElement&&e!==document.body;e=e.parentElement){let s=getComputedStyle(e);if(e.matches('input,textarea,select,button,video,audio,[contenteditable=true],[role=slider]')||(/(auto|scroll)/.test(s.overflowX)&&e.scrollWidth>e.clientWidth+2)||(/(auto|scroll)/.test(s.overflowY)&&e.scrollHeight>e.clientHeight+2))return false;}return true})()";
+    String script="(()=>{const v=window.visualViewport;if(v&&(Math.abs(v.offsetLeft)>1||Math.abs(v.offsetTop)>1||v.width<innerWidth*.98))return false;const k=(v?v.width:innerWidth)/"+target.getWidth()+";let e=document.elementFromPoint("+x+"*k,"+y+"*k);if(!e)return false;for(;e&&e!==document.documentElement&&e!==document.body;e=e.parentElement){let s=getComputedStyle(e);if(e.matches('input,textarea,select,button,video,audio,[contenteditable=true],[role=slider]')||(/(auto|scroll)/.test(s.overflowX)&&e.scrollWidth>e.clientWidth+2)||(/(auto|scroll)/.test(s.overflowY)&&e.scrollHeight>e.clientHeight+2))return false;}return true})()";
     target.evaluateJavascript(script,result->done.accept(web()==target&&"true".equals(result)));
   }
   String currentUrl(){return web()==null?"":observedUrl(web().getUrl());}

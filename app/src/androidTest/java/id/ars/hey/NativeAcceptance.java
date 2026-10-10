@@ -104,6 +104,22 @@ public final class NativeAcceptance extends Instrumentation {
     shot.recycle();
   }
 
+  private boolean probe(float x, float y) throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    boolean[] allowed = {true};
+    ui(
+        () ->
+            fixture.checkGesture(
+                x,
+                y,
+                result -> {
+                  allowed[0] = result;
+                  latch.countDown();
+                }));
+    assertThat(latch.await(8, TimeUnit.SECONDS), "Gesture probe timeout");
+    return allowed[0];
+  }
+
   private String js(WebView web, String script) throws Exception {
     CountDownLatch latch = new CountDownLatch(1);
     String[] result = {null};
@@ -160,6 +176,9 @@ public final class NativeAcceptance extends Instrumentation {
               startActivitySync(
                   new Intent(getTargetContext(), MainActivity.class)
                       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      assertThat(
+          Build.HARDWARE.equals("ranchu") || Build.HARDWARE.equals("goldfish"),
+          "Test APK fixtures require an isolated Android emulator");
       app = (HeyApp) activity.getApplication();
       waitForIdleSync();
       SystemClock.sleep(500);
@@ -288,6 +307,28 @@ public final class NativeAcceptance extends Instrumentation {
           js(web, "document.querySelector('#change').textContent").contains("Test interaction"),
           "Web fixture missing");
       capture("browser-fixture");
+      String rectJson =
+          new JSONArray(
+                  "["
+                      + js(
+                          web,
+                          "JSON.stringify((()=>{const"
+                              + " r=document.querySelector('#carousel').getBoundingClientRect();return"
+                              + " [r.left+20,r.top+20,visualViewport.width]})())")
+                      + "]")
+              .getString(0);
+      JSONArray rect = new JSONArray(rectJson);
+      float cssScale = web.getWidth() / (float) rect.getDouble(2);
+      assertThat(
+          !probe((float) rect.getDouble(0) * cssScale, (float) rect.getDouble(1) * cssScale),
+          "Site carousel allowed shell gesture");
+      assertThat(
+          probe(web.getWidth() * .6f, 20 * cssScale), "Neutral web content did not allow gesture");
+      record(
+          "native_site_hit_test",
+          "PASS",
+          "Production DOM probe rejects real nested horizontal scroller and accepts neutral content"
+              + " using actual CSS viewport ratio");
       ui(
           () ->
               CookieManager.getInstance()
@@ -362,6 +403,18 @@ public final class NativeAcceptance extends Instrumentation {
       ui(() -> shell.arc.show(1));
       capture("browser-fixture-arc");
       ui(() -> shell.arc.dismiss());
+      js(web, "history.pushState({},'', '#hey-history-fixture')");
+      SystemClock.sleep(250);
+      ui(() -> assertThat(fixture.humanBack(), "Native browser Back unavailable"));
+      SystemClock.sleep(500);
+      assertThat(
+          js(web, "location.hash !== '#hey-history-fixture'").equals("true"),
+          "History did not return");
+      record(
+          "native_history_back",
+          "PASS",
+          "Real production humanBack returns same-document WebView history and invalidates old"
+              + " state");
       int cacheMode[] = {0};
       ui(
           () -> {
@@ -388,16 +441,21 @@ public final class NativeAcceptance extends Instrumentation {
               + " retest");
       // Runtime statuses are projection fixtures, not connectivity claims. No credential injection.
       select(0);
-      ui(
-          () -> {
-            ((TextView) field(activity, "heroTitle")).setText(UiState.title(UiState.Mode.READY));
-            ((TextView) field(activity, "heroDescription"))
-                .setText(UiState.description(UiState.Mode.READY));
-            ((TextView) field(activity, "homeStatus"))
-                .setText("•  " + UiState.status(UiState.Mode.READY));
-            ((Button) field(activity, "homeAction")).setVisibility(View.GONE);
-          });
-      capture("home-ready-projection-fixture");
+      for (UiState.Mode projection :
+          new UiState.Mode[] {UiState.Mode.READY, UiState.Mode.WORKING, UiState.Mode.PAUSED}) {
+        ui(
+            () -> {
+              activity.heroTitle.setText(UiState.title(projection));
+              activity.heroDescription.setText(UiState.description(projection));
+              activity.homeStatus.setText("•  " + UiState.status(projection));
+              activity.homeStatus.setTextColor(activity.ui.accent(projection));
+              activity.homeAction.setText(UiState.action(projection));
+              activity.homeAction.setVisibility(
+                  UiState.action(projection).isEmpty() ? View.GONE : View.VISIBLE);
+            });
+        capture("home-" + projection.name().toLowerCase() + "-projection-fixture");
+      }
+      taskVisualFixtures();
       record(
           "fixture_limits",
           "RETEST_REQUIRED",
@@ -415,6 +473,95 @@ public final class NativeAcceptance extends Instrumentation {
       } catch (Exception ignored) {
         finish(Activity.RESULT_CANCELED, status);
       }
+    }
+  }
+
+  private void taskVisualFixtures() throws Exception {
+    String last = app.secure.get("lastTask", "{}"), history = app.secure.get("taskHistory", "[]");
+    try {
+      select(2);
+      ui(
+          () -> {
+            app.state.control("AGENT");
+            app.state.taskInfo(new JSONObject().put("method", "action").put("action", "scroll"));
+            app.state.task("native-visual-fixture", new JSONObject());
+            activity.render();
+          });
+      waitForIdleSync();
+      capture("tasks-running-projection-fixture");
+      ui(
+          () -> {
+            activity.expanded = "task";
+            activity.render();
+          });
+      capture("tasks-running-detail-projection-fixture");
+      ui(
+          () -> {
+            app.state.task("", new JSONObject());
+            app.state.control("HUMAN");
+            app.secure.put(
+                "lastTask",
+                new JSONObject()
+                    .put("method", "action")
+                    .put("action", "scroll")
+                    .put("status", "UNKNOWN")
+                    .put("reason", "HUMAN_CONTROL_ACTIVE")
+                    .put("verified", false)
+                    .toString());
+            activity.expanded = "";
+            activity.render();
+          });
+      waitForIdleSync();
+      capture("tasks-human-projection-fixture");
+      ui(
+          () -> {
+            app.state.control("AGENT");
+            app.secure.put(
+                "lastTask",
+                new JSONObject()
+                    .put("method", "action")
+                    .put("action", "scroll")
+                    .put("status", "DONE")
+                    .put("verified", false)
+                    .put("completedAt", System.currentTimeMillis())
+                    .put("evidence", new JSONObject().put("postcondition", "SCROLL_CHANGED"))
+                    .toString());
+            activity.expanded = "task";
+            activity.render();
+          });
+      waitForIdleSync();
+      capture("tasks-completed-unverified-projection-fixture");
+      ui(
+          () -> {
+            app.secure.put(
+                "lastTask",
+                new JSONObject()
+                    .put("method", "action")
+                    .put("action", "scroll")
+                    .put("status", "FAILED")
+                    .put("reason", "EXECUTION_ABORTED")
+                    .put("verified", false)
+                    .toString());
+            activity.expanded = "";
+            activity.render();
+          });
+      waitForIdleSync();
+      capture("tasks-interrupted-projection-fixture");
+      record(
+          "task_visual_projections",
+          "PASS",
+          "Native running/human/completed-unverified/interrupted/detail renderers use isolated"
+              + " test-only receipt fixtures; this is not live task certification");
+    } finally {
+      ui(
+          () -> {
+            app.state.task("", new JSONObject());
+            app.state.taskInfo(new JSONObject());
+            app.secure.put("lastTask", last);
+            app.secure.put("taskHistory", history);
+            activity.expanded = "";
+            activity.render();
+          });
     }
   }
 
