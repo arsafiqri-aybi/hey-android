@@ -10,7 +10,7 @@ The bundled photograph comes from https://images.unsplash.com/photo-150178588804
 
 Image use follows the Unsplash license, https://unsplash.com/license, checked on 2026-10-10. The source URL is retained for attribution and traceability. The generated design exploration was not used as a falsely labelled 4K source.
 
-`WallpaperPolicy` selects one asset from display pixel dimensions and Android memory class. Low-RAM devices and memory classes below 192 MB cap at 1080p; classes below 384 MB cap at 1440p. Only the selected asset is opened through the app-owned offline Home WebView. A large image is never decoded and then downscaled on a low-memory device.
+`WallpaperPolicy` selects one asset from display pixel dimensions and Android memory class. Low-RAM devices and memory classes below 192 MB cap at 1080p; classes below 384 MB cap at 1440p. Only the selected asset is opened through the app-owned offline Home WebView. A large image is never decoded and then downscaled on a low-memory device. `HomeAssetPolicy` serves two exact offline HTTPS routes: the Home HTML and a wallpaper alias mapped to the chosen quality. Every other request is blocked. Android's `shouldInterceptRequest` does not intercept `file:///android_asset/` requests, so those URLs cannot implement an adaptive alias. Reference: https://developer.android.com/reference/android/webkit/WebViewClient#shouldInterceptRequest(android.webkit.WebView,android.webkit.WebResourceRequest).
 
 ## Browser improvements
 

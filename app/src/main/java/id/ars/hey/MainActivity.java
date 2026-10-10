@@ -68,11 +68,10 @@ public final class MainActivity extends Activity implements StateStore.Listener 
     config.setAllowFileAccess(false);config.setAllowContentAccess(false);config.setBlockNetworkLoads(true);
     homeView.setWebViewClient(new WebViewClient(){
       @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
-        // This alias loads only the chosen offline image, without decoding every quality tier.
-        if("file:///android_asset/wallpaper.webp".equals(request.getUrl().toString())){
-          try{return new WebResourceResponse("image/webp",null,getAssets().open(wallpaperAsset));}catch(java.io.IOException ignored){}
-        }
-        return null;
+        // android_asset URLs bypass this callback; use an app-owned HTTPS origin instead.
+        String asset=HomeAssetPolicy.asset(request.getUrl().toString(),wallpaperAsset);
+        if(asset!=null)try{return new WebResourceResponse(asset.endsWith(".webp")?"image/webp":"text/html",asset.endsWith(".webp")?null:"UTF-8",getAssets().open(asset));}catch(java.io.IOException ignored){}
+        return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",java.util.Map.of(),new java.io.ByteArrayInputStream(new byte[0]));
       }
       @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
         Uri uri=request.getUrl();
@@ -82,13 +81,13 @@ public final class MainActivity extends Activity implements StateStore.Listener 
         return true;
       }
       @Override public void onPageFinished(WebView v,String url){
-        if(url!=null&&url.startsWith("file:///android_asset/home.html")){
+        if(HomeAssetPolicy.HOME_URL.equals(url)){
           homeLoaded=true;configureHomeSurface();updateHomeSurface(app.state.snapshot());
         }
       }
     });
     shell.addView(homeView,new FrameLayout.LayoutParams(-1,-1));
-    homeView.loadUrl("file:///android_asset/home.html");
+    homeView.loadUrl(HomeAssetPolicy.HOME_URL);
   }
   private void configureHomeSurface(){
     if(!homeLoaded||homeView==null)return;
