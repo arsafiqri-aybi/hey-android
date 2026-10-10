@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+if ! command -v sdkmanager >/dev/null; then
+  echo "Android command-line tools unavailable in $ANDROID_HOME"; exit 1
+fi
 sdkmanager 'system-images;android-31;google_apis;x86_64' 'emulator'
 echo no | avdmanager create avd -n hey_acceptance -k 'system-images;android-31;google_apis;x86_64' --device pixel_5
 "${ANDROID_HOME}/emulator/emulator" -avd hey_acceptance -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim > /tmp/hey-ci-emulator.log 2>&1 &

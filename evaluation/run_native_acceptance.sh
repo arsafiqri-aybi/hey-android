@@ -13,7 +13,7 @@ run_variant() {
   adb shell am instrument -w -e variant "$variant" id.ars.hey.preview.test/id.ars.hey.NativeAcceptance | tee "evaluation/native-output/$variant-instrumentation.txt"
   adb logcat -d -s AndroidRuntime > "evaluation/native-output/$variant-runtime.txt"
   adb exec-out run-as id.ars.hey.preview tar -cf - files/acceptance > "evaluation/native-output/$variant.tar"
-  tar -xf "evaluation/native-output/$variant.tar" -C evaluation/native-output
+  tar --no-same-owner -xf "evaluation/native-output/$variant.tar" -C evaluation/native-output
   python3 - "$variant" <<'PY'
 import json,sys
 from pathlib import Path
