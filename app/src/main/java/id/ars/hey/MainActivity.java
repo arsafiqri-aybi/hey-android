@@ -11,13 +11,14 @@ import android.os.*;
 import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
+import android.webkit.*;
 import org.json.*;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity implements StateStore.Listener {
   private HeyApp app;private final Handler main=new Handler(Looper.getMainLooper());private final java.util.concurrent.ExecutorService network=Executors.newSingleThreadExecutor();
   private final RuntimeStartPolicy startPolicy=new RuntimeStartPolicy();private boolean visible;private Button connectButton;private TextView runtimeDetail;
-  private LinearLayout root,content,nav;private TextView connection,detail,taskTitle,taskDetail,taskTime,taskCounts;private FrameLayout browserHost;private Button pauseButton;private TextView browserStatus,audioStatus;private Button audioButton;private String page="Home";private float downX,downY;
+  private FrameLayout shell;private WebView homeView;private boolean homeLoaded;private LinearLayout root,content,nav;private TextView connection,detail,taskTitle,taskDetail,taskTime,taskCounts;private FrameLayout browserHost;private Button pauseButton;private TextView browserStatus,audioStatus;private Button audioButton;private String page="Home";private float downX,downY;
   private final int ink=Color.rgb(35,42,37),muted=Color.rgb(108,117,108),green=Color.rgb(51,82,61),background=Color.rgb(243,242,239);
   @Override public void onCreate(Bundle state){super.onCreate(state);app=(HeyApp)getApplication();app.state.listen(this);getWindow().setStatusBarColor(background);getWindow().setNavigationBarColor(background);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);build();pairIntent(getIntent());}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);pairIntent(intent);}
@@ -32,16 +33,87 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   }
   private LinearLayout card(){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(22),dp(22),dp(22),dp(22));c.setBackground(surface(Color.rgb(255,254,251),24));c.setElevation(dp(3));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(dp(1),dp(4),dp(1),dp(18));c.setLayoutParams(p);return c;}
   private void build(){
-    root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(background);root.setPadding(dp(20),dp(18),dp(20),dp(12));setContentView(root);
+    root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(background);root.setPadding(dp(20),dp(18),dp(20),dp(12));shell=new FrameLayout(this);shell.addView(root,new FrameLayout.LayoutParams(-1,-1));
     root.setOnApplyWindowInsetsListener((v,insets)->{Insets i=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(dp(20)+i.left,dp(12)+i.top,dp(20)+i.right,dp(8)+i.bottom);return insets;});
     LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);TextView wordmark=text("Hey",31,ink,true);header.addView(wordmark);TextView by=text("  by Ars",13,muted,false);header.addView(by);root.addView(header);space(root,16);
     ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-    nav=new LinearLayout(this);nav.setPadding(dp(4),dp(4),dp(4),dp(4));nav.setBackground(surface(Color.rgb(230,233,226),20));root.addView(nav,new LinearLayout.LayoutParams(-1,dp(56)));render();
+    nav=new LinearLayout(this);nav.setPadding(dp(4),dp(4),dp(4),dp(4));nav.setBackground(surface(Color.rgb(230,233,226),20));root.addView(nav,new LinearLayout.LayoutParams(-1,dp(56)));createHomeView();setContentView(shell);render();
   }
   private void render(){HeyService service=HeyService.current;if(service!=null&&service.browser!=null)service.browser.detach(this);content.removeAllViews();connection=detail=taskTitle=taskDetail=taskTime=taskCounts=null;browserHost=null;browserStatus=null;pauseButton=null;audioStatus=null;audioButton=null;connectButton=null;runtimeDetail=null;nav.removeAllViews();for(String name:new String[]{"Home","Browser","Tasks","Settings"}){TextView tab=text(name,12,name.equals(page)?green:muted,name.equals(page));tab.setGravity(Gravity.CENTER);if(name.equals(page))tab.setBackground(surface(Color.WHITE,16));tab.setOnClickListener(v->{page=name;render();});nav.addView(tab,new LinearLayout.LayoutParams(0,-1,1));}
-    switch(page){case "Browser":browser();break;case "Tasks":tasks();break;case "Settings":settings();break;default:home();}
+    switch(page){case "Browser":browser();break;case "Tasks":tasks();break;case "Settings":settings();break;default:break;}
+    boolean home="Home".equals(page);root.setVisibility(home?View.GONE:View.VISIBLE);homeView.setVisibility(home?View.VISIBLE:View.GONE);
+    getWindow().setStatusBarColor(home?Color.TRANSPARENT:background);getWindow().setNavigationBarColor(home?Color.TRANSPARENT:background);
+    if(Build.VERSION.SDK_INT>=29)getWindow().setNavigationBarContrastEnforced(false);
+    getWindow().getDecorView().setSystemUiVisibility(home?(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE):(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR));
+    if(home)homeView.onResume();else homeView.onPause();
     if(Settings.Global.getFloat(getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1)>0){content.setAlpha(.65f);content.setTranslationY(dp(5));content.animate().alpha(1).translationY(0).setDuration(220).start();}update();
   }
+
+  // App-owned, offline-only UI WebView. Never expose JS interfaces to browsing pages.
+  private void createHomeView(){
+    homeView=new WebView(this);
+    homeView.setBackgroundColor(Color.rgb(38,65,54));
+    homeView.setVerticalScrollBarEnabled(false);
+    WebSettings config=homeView.getSettings();
+    config.setJavaScriptEnabled(true);config.setDomStorageEnabled(false);
+    config.setAllowFileAccess(false);config.setAllowContentAccess(false);config.setBlockNetworkLoads(true);
+    homeView.setWebViewClient(new WebViewClient(){
+      @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
+        Uri uri=request.getUrl();
+        if("hey-action".equals(uri.getScheme())){
+          String command=uri.getHost();main.post(()->handleHomeAction(command));
+        }
+        return true;
+      }
+      @Override public void onPageFinished(WebView v,String url){
+        if(url!=null&&url.startsWith("file:///android_asset/home.html")){
+          homeLoaded=true;updateHomeSurface(app.state.snapshot());
+        }
+      }
+    });
+    shell.addView(homeView,new FrameLayout.LayoutParams(-1,-1));
+    homeView.loadUrl("file:///android_asset/home.html");
+  }
+  private void handleHomeAction(String action){
+    if(action==null)return;
+    if(action.equals("status")){
+      JSONObject s=app.state.snapshot();
+      String reason=s.optString("runtimeReason",s.optString("reason",""));
+      boolean paired=!app.secure.get("deviceToken","").isEmpty();
+      new AlertDialog.Builder(this).setTitle("Koneksi Hey")
+        .setMessage("Koneksi: "+s.optString("connection","UNKNOWN")+"\nService: "+s.optString("runtime","UNKNOWN")
+          +(reason.isEmpty()?"":"\nDetail: "+reason)+"\n"+(paired?"Pairing tersimpan.":"Pairing belum tersimpan."))
+        .setPositiveButton("Tutup",null)
+        .setNeutralButton(paired?"Jalankan Hey":"Pengaturan",(dialog,which)->{
+          if(paired)connect();else{page="Settings";render();}
+        }).show();
+      return;
+    }
+    if(action.equals("browser"))page="Browser";
+    else if(action.equals("tasks"))page="Tasks";
+    else if(action.equals("settings"))page="Settings";
+    else return;
+    render();
+  }
+  private void updateHomeSurface(JSONObject state){
+    if(!homeLoaded||homeView==null)return;
+    String status=state.optString("connection","UNKNOWN");
+    String label=switch(status){case "ONLINE"->"Terhubung";case "CONNECTING","REGISTERING"->"Menghubungkan";
+      case "PAUSED"->"Dijeda";case "OFFLINE"->"Offline";default->"Belum terhubung";};
+    if("PAUSED".equals(app.secure.get("ownerIntent","ACTIVE"))){status="PAUSED";label="Dijeda";}
+    String activity="Belum ada aktivitas";
+    try{JSONObject last=new JSONObject(app.secure.get("lastTask","{}"));
+      String value=last.optString("status","");
+      if(!value.isEmpty())activity=value.equals("DONE")?"Tugas terakhir selesai":
+        value.equals("FAILED")?"Tugas terakhir gagal":"Tugas terakhir: "+value;
+    }catch(Exception ignored){}
+    homeView.evaluateJavascript("window.heySetState&&window.heySetState("+
+      JSONObject.quote(status)+","+JSONObject.quote(label)+","+JSONObject.quote(activity)+");",null);
+  }
+  @Override public void onBackPressed(){
+    if(!"Home".equals(page)){page="Home";render();}else super.onBackPressed();
+  }
+
   private void home(){space(content,22);content.addView(text("A little hello.",35,ink,true));content.addView(text("Ruang untuk browsermu.",18,muted,false));space(content,30);LinearLayout c=card();connection=text("Memeriksa…",18,green,true);c.addView(connection);detail=text("",14,muted,false);space(c,8);c.addView(detail);
     connectButton=button("Jalankan Hey",this::connect,true);c.addView(connectButton);runtimeDetail=text("",12,muted,false);space(c,8);c.addView(runtimeDetail);content.addView(c);
     LinearLayout control=card();control.addView(text("Tetap di tanganmu.",18,ink,true));space(control,8);control.addView(text("Lihat browser yang sedang bekerja, ambil alih kapan pun, atau jeda seluruh aktivitas.",14,muted,false));control.addView(button("Lihat browser",()->{page="Browser";render();},false));content.addView(control);
@@ -76,7 +148,7 @@ public final class MainActivity extends Activity implements StateStore.Listener 
     app.state.connection("REGISTERING","");network.execute(()->{try{Transport.gateway(gateway);app.secure.put("gateway",gateway);Transport t=new Transport(app.secure);JSONObject result=t.send("/api/enroll",new JSONObject().put("code",code),false);app.secure.put("deviceId",result.getString("deviceId"));app.secure.put("deviceToken",result.getString("deviceToken"));app.state.connection("PAIRED","");app.refreshConfig();main.post(()->{startBrowser();render();});}catch(Exception e){app.state.connection("UNREGISTERED","PAIRING_FAILED");main.post(()->Toast.makeText(this,"Pairing belum berhasil. Minta tautan baru dari Hey.",Toast.LENGTH_LONG).show());}});
   }
   @Override public void changed(){main.post(this::update);}
-  private void update(){JSONObject s=app.state.snapshot();updateRuntime(s);if(audioStatus!=null){String audio=s.optString("audio");audioStatus.setText(audio.equals("CAPTURING")?"Sesi audio aktif.":audio.equals("CONSENT_ENDED")?"Izin sesi berakhir. Aktifkan ulang untuk mengamati suara.":audio.equals("OFF")?"Audio belum diaktifkan.":"Audio belum tersedia: "+audio);audioButton.setText(audio.equals("CAPTURING")?"Hentikan audio":"Aktifkan audio");}if(pauseButton!=null)pauseButton.setText(app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Lanjutkan Hey":"Jeda Hey");attachBrowser();if(connection!=null){String status=s.optString("connection");connection.setText(switch(status){case "PAUSED"->"Hey dijeda";case "ONLINE"->"Terhubung";case "PAIRED"->"Ponsel sudah dikenali";case "REGISTERING","CONNECTING"->"Menyambungkan…";case "ERROR"->"Hey belum dapat berjalan";case "OFFLINE"->"Menghubungkan kembali…";case "UNKNOWN"->"Memeriksa koneksi…";default->"Satu koneksi, sekali saja";});detail.setText(app.secure.get("deviceToken","").isEmpty()?"Hubungkan ponsel melalui tautan Hey di ChatGPT.":app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Aktivitas dijeda. Tekan Lanjutkan Hey saat kamu siap.":status.equals("ONLINE")?(s.optString("browser").equals("READY")?"Browser siap. Kamu tetap bebas menggunakan ponsel.":"Koneksi tersambung. Status browser: "+s.optString("browser")):status.equals("CONNECTING")?"Menjalankan Hey dan menunggu heartbeat pertama…":s.optString("runtime").equals("ERROR")?"Startup belum berhasil. Tekan Jalankan Hey untuk mencoba lagi.":"Pairing tersimpan. Tekan Jalankan Hey untuk memulihkan koneksi.");}updateTasks();}
+  private void update(){JSONObject s=app.state.snapshot();updateRuntime(s);if(audioStatus!=null){String audio=s.optString("audio");audioStatus.setText(audio.equals("CAPTURING")?"Sesi audio aktif.":audio.equals("CONSENT_ENDED")?"Izin sesi berakhir. Aktifkan ulang untuk mengamati suara.":audio.equals("OFF")?"Audio belum diaktifkan.":"Audio belum tersedia: "+audio);audioButton.setText(audio.equals("CAPTURING")?"Hentikan audio":"Aktifkan audio");}if(pauseButton!=null)pauseButton.setText(app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Lanjutkan Hey":"Jeda Hey");attachBrowser();if(connection!=null){String status=s.optString("connection");connection.setText(switch(status){case "PAUSED"->"Hey dijeda";case "ONLINE"->"Terhubung";case "PAIRED"->"Ponsel sudah dikenali";case "REGISTERING","CONNECTING"->"Menyambungkan…";case "ERROR"->"Hey belum dapat berjalan";case "OFFLINE"->"Menghubungkan kembali…";case "UNKNOWN"->"Memeriksa koneksi…";default->"Satu koneksi, sekali saja";});detail.setText(app.secure.get("deviceToken","").isEmpty()?"Hubungkan ponsel melalui tautan Hey di ChatGPT.":app.secure.get("ownerIntent","ACTIVE").equals("PAUSED")?"Aktivitas dijeda. Tekan Lanjutkan Hey saat kamu siap.":status.equals("ONLINE")?(s.optString("browser").equals("READY")?"Browser siap. Kamu tetap bebas menggunakan ponsel.":"Koneksi tersambung. Status browser: "+s.optString("browser")):status.equals("CONNECTING")?"Menjalankan Hey dan menunggu heartbeat pertama…":s.optString("runtime").equals("ERROR")?"Startup belum berhasil. Tekan Jalankan Hey untuk mencoba lagi.":"Pairing tersimpan. Tekan Jalankan Hey untuk memulihkan koneksi.");}updateTasks();updateHomeSurface(s);}
   private void updateRuntime(JSONObject s){
     boolean paired=!app.secure.get("deviceToken","").isEmpty(),paused=app.secure.get("ownerIntent","ACTIVE").equals("PAUSED");
     if(connectButton!=null)connectButton.setText(!paired?"Hubungkan dari ChatGPT":paused?"Lanjutkan Hey":s.optString("connection").equals("ONLINE")?"Periksa koneksi":"Jalankan Hey");
@@ -84,8 +156,8 @@ public final class MainActivity extends Activity implements StateStore.Listener 
   }
   private void attachBrowser(){if(browserHost==null)return;HeyService s=HeyService.current;if(s!=null&&s.browser!=null&&browserHost.getChildCount()==0)s.browser.attach(this,browserHost);if(browserStatus!=null)browserStatus.setText(s==null||!s.running()?"Browser belum aktif. Tekan Jalankan Hey.":s.browser==null?"Browser sedang disiapkan: "+app.state.snapshot().optString("browser"):app.state.snapshot().optString("control").equals("HUMAN")?"Kamu memegang kendali.":"Hey memegang kendali. Ambil alih untuk berinteraksi.");}
   private final Runnable surfaceTick=new Runnable(){@Override public void run(){if(visible)startRuntime(false);attachBrowser();main.postDelayed(this,1000);}};
-  @Override protected void onResume(){super.onResume();visible=true;startRuntime(false);app.refreshConfig();main.removeCallbacks(surfaceTick);main.post(surfaceTick);update();}
-  @Override protected void onPause(){visible=false;main.removeCallbacks(surfaceTick);HeyService s=HeyService.current;if(s!=null&&s.browser!=null)s.browser.detach(this);super.onPause();}
-  @Override protected void onDestroy(){app.state.unlisten(this);main.removeCallbacksAndMessages(null);network.shutdownNow();super.onDestroy();}
+  @Override protected void onResume(){super.onResume();visible=true;if(homeView!=null&&"Home".equals(page))homeView.onResume();startRuntime(false);app.refreshConfig();main.removeCallbacks(surfaceTick);main.post(surfaceTick);update();}
+  @Override protected void onPause(){visible=false;if(homeView!=null)homeView.onPause();main.removeCallbacks(surfaceTick);HeyService s=HeyService.current;if(s!=null&&s.browser!=null)s.browser.detach(this);super.onPause();}
+  @Override protected void onDestroy(){if(homeView!=null){shell.removeView(homeView);homeView.destroy();}app.state.unlisten(this);main.removeCallbacksAndMessages(null);network.shutdownNow();super.onDestroy();}
 }
 
