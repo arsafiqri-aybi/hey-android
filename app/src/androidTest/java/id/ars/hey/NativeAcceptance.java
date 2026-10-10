@@ -58,6 +58,31 @@ public final class NativeAcceptance extends Instrumentation {
     SystemClock.sleep(300);
   }
 
+  private View find(View root, String text) {
+    if (root instanceof TextView && ((TextView) root).getText().toString().equals(text))
+      return root;
+    if (root instanceof ViewGroup) {
+      ViewGroup group = (ViewGroup) root;
+      for (int i = 0; i < group.getChildCount(); i++) {
+        View found = find(group.getChildAt(i), text);
+        if (found != null) return found;
+      }
+    }
+    return null;
+  }
+
+  private void expand(String text, String expected) throws Exception {
+    ui(
+        () -> {
+          View label = find(activity.content, text);
+          assertThat(label != null, "Missing setting " + text);
+          ((View) label.getParent().getParent()).performClick();
+          assertThat(activity.expanded.equals(expected), "Inline expansion failed " + expected);
+        });
+    waitForIdleSync();
+    capture("settings-" + expected + "-expanded");
+  }
+
   private void assertThat(boolean pass, String message) {
     if (!pass) throw new AssertionError(message);
   }
@@ -150,8 +175,39 @@ public final class NativeAcceptance extends Instrumentation {
       capture("tasks-empty");
       select(3);
       capture("settings-unpaired");
-      // Verify exact native grouped row order and absent top header; design fixture states are
-      // test-only.
+      ui(
+          () -> {
+            assertThat(
+                find(activity.content, "Pengaturan") == null, "Removed Settings header returned");
+            for (String label :
+                new String[] {
+                  "Koneksi & Layanan",
+                  "Sesi Browser",
+                  "Privasi & Izin",
+                  "Kendali AI & Manusia",
+                  "Tampilan & Gerakan",
+                  "Tentang Hey"
+                })
+              assertThat(
+                  find(activity.content, label) != null, "Missing locked Settings row " + label);
+          });
+      if (variant.equals("regular")) {
+        expand("Sesi Browser", "session");
+        expand("Privasi & Izin", "privacy");
+        expand("Kendali AI & Manusia", "control");
+        expand("Tampilan & Gerakan", "motion");
+        expand("Tentang Hey", "about");
+        ui(
+            () -> {
+              activity.expanded = "";
+              activity.render();
+            });
+        record(
+            "settings_expansion",
+            "PASS",
+            "All five real inline row handlers expand; one selected section replaces the previous"
+                + " section; consent was not invoked");
+      }
       record("native_pages", "PASS", "Home/Tasks/Settings captured with actual unpaired state");
       select(0);
       HeyShell shell = (HeyShell) field(activity, "shell");
@@ -166,6 +222,24 @@ public final class NativeAcceptance extends Instrumentation {
       swipe(x, y, x - shell.arc.step() * .8f, y);
       assertThat((int) field(activity, "page") == 1, "Arc did not commit Browser");
       capture("browser-arc");
+      ui(
+          () -> {
+            ViewGroup cards = shell.arc;
+            int width = cards.getChildAt(0).getWidth(), height = cards.getChildAt(0).getHeight();
+            for (int i = 0; i < cards.getChildCount(); i++) {
+              View card = cards.getChildAt(i);
+              assertThat(
+                  card.getWidth() == width && card.getHeight() == height, "Unequal Arc cards");
+              assertThat(
+                  card.getTranslationY()
+                      <= 16 * activity.getResources().getDisplayMetrics().density + 1,
+                  "Arc too deep");
+            }
+          });
+      record(
+          "arc_geometry",
+          "PASS",
+          "All four native cards are equal width/height; vertical drop at most 16dp");
       record(
           "arc_native_swipe",
           "PASS",
@@ -288,6 +362,30 @@ public final class NativeAcceptance extends Instrumentation {
       ui(() -> shell.arc.show(1));
       capture("browser-fixture-arc");
       ui(() -> shell.arc.dismiss());
+      int cacheMode[] = {0};
+      ui(
+          () -> {
+            cacheMode[0] = web.getSettings().getCacheMode();
+            fixture.humanHardReload();
+            assertThat(
+                web.getSettings().getCacheMode() == WebSettings.LOAD_NO_CACHE,
+                "Hard reload did not bypass WebView cache");
+            fixture.abort();
+            assertThat(
+                web.getSettings().getCacheMode() == cacheMode[0],
+                "Cache policy not restored on abort");
+          });
+      assertThat(
+          CookieManager.getInstance()
+              .getCookie("https://example.com")
+              .contains("hey_fixture_cookie=retained"),
+          "Reload cleared cookies");
+      record(
+          "reload_policy_cookie",
+          "PASS",
+          "Production reload sets LOAD_NO_CACHE and abort restores prior policy without clearing"
+              + " cookie; HTTP/service-worker cache behavior requires physical/controlled network"
+              + " retest");
       // Runtime statuses are projection fixtures, not connectivity claims. No credential injection.
       select(0);
       ui(
