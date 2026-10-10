@@ -70,7 +70,7 @@ public final class MainActivity extends Activity implements StateStore.Listener 
       @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
         // android_asset URLs bypass this callback; use an app-owned HTTPS origin instead.
         String asset=HomeAssetPolicy.asset(request.getUrl().toString(),wallpaperAsset);
-        if(asset!=null)try{return new WebResourceResponse(asset.endsWith(".webp")?"image/webp":"text/html",asset.endsWith(".webp")?null:"UTF-8",getAssets().open(asset));}catch(java.io.IOException ignored){}
+        if(asset!=null)try{return new WebResourceResponse(HomeAssetPolicy.mimeType(asset),asset.endsWith(".webp")?null:"UTF-8",getAssets().open(asset));}catch(java.io.IOException ignored){}
         return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",java.util.Map.of(),new java.io.ByteArrayInputStream(new byte[0]));
       }
       @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){

@@ -6,6 +6,12 @@ final class HomeAssetPolicy {
   static String asset(String url, String wallpaper) {
     if (HOME_URL.equals(url)) return "home.html";
     if ("https://hey-home.invalid/wallpaper.webp".equals(url)) return wallpaper;
+    if ("https://hey-home.invalid/hey-logo.svg".equals(url)) return "hey-logo.svg";
     return null;
+  }
+  static String mimeType(String asset) {
+    if ("hey-logo.svg".equals(asset)) return "image/svg+xml";
+    if (asset != null && asset.endsWith(".webp")) return "image/webp";
+    return "text/html";
   }
 }
