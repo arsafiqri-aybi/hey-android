@@ -121,27 +121,27 @@ public final class NativeAcceptance extends Instrumentation {
 
   private void swipe(float x, float y, float endX, float endY) throws Exception {
     long down = SystemClock.uptimeMillis();
-    getUiAutomation()
-        .injectInputEvent(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0), true);
+    inject(MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0));
     for (int i = 1; i <= 16; i++) {
       SystemClock.sleep(25);
-      getUiAutomation()
-          .injectInputEvent(
-              MotionEvent.obtain(
-                  down,
-                  SystemClock.uptimeMillis(),
-                  MotionEvent.ACTION_MOVE,
-                  x + (endX - x) * i / 16,
-                  y + (endY - y) * i / 16,
-                  0),
-              true);
+      inject(
+          MotionEvent.obtain(
+              down,
+              SystemClock.uptimeMillis(),
+              MotionEvent.ACTION_MOVE,
+              x + (endX - x) * i / 16,
+              y + (endY - y) * i / 16,
+              0));
     }
-    getUiAutomation()
-        .injectInputEvent(
-            MotionEvent.obtain(
-                down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, endX, endY, 0),
-            true);
+    inject(
+        MotionEvent.obtain(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, endX, endY, 0));
     SystemClock.sleep(300);
+  }
+
+  private void inject(MotionEvent event) {
+    event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+    assertThat(getUiAutomation().injectInputEvent(event, true), "Touchscreen injection rejected");
+    event.recycle();
   }
 
   @Override
