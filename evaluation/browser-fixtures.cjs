@@ -63,6 +63,9 @@ async function scroll(page,x,y){return JSON.parse(await page.evaluate(replace(so
     const boxes=await p.evaluate(()=>{const box=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,b:r.bottom}};return {header:box('.header'),preview:box('.preview'),activity:box('.activity'),dock:box('.dock'),bodyWidth:document.documentElement.scrollWidth,ratio:document.querySelector('.preview').offsetWidth/document.querySelector('.preview').offsetHeight}});
     check(Math.abs(boxes.ratio-.8)<.006,'preview remains 4:5 '+width);check(boxes.header.h>=68,'roomier header '+width);check(boxes.bodyWidth<=width,'no horizontal overflow '+width);
     if(height>=640)check(boxes.activity.b+8<boxes.dock.y,'dock does not cover activity '+width);
+    const intersects=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+    check(!intersects(boxes.preview,boxes.dock),'dock never covers preview '+width);check(!intersects(boxes.activity,boxes.dock),'dock never covers activity '+width);
+    if(width>height)check(boxes.preview.b<=height-40,'landscape preview fits above safe area');
     if(width===393){check(boxes.preview.h>370,'large focal preview');check(await p.locator('.brand').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))===25,'smaller wordmark');}
     const neutral=await p.locator('.dot').evaluate(el=>getComputedStyle(el).backgroundColor);await p.evaluate(()=>window.heySetState('ONLINE','Terhubung','Belum ada aktivitas'));const online=await p.locator('.dot').evaluate(el=>getComputedStyle(el).backgroundColor);check(neutral!==online,'unregistered is not green '+width);
     await p.evaluate(()=>{window.heySetState('UNREGISTERED','Belum terhubung','Belum ada aktivitas');window.heyConfigure({reduceMotion:true,lowEffects:false})});

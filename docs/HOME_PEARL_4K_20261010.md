@@ -2,7 +2,7 @@
 
 The Home redesign follows the owner's latest corrections: a roomier header, a smaller Hey wordmark, a much larger portrait Hello preview at width:height 4:5, and a clickable Browser Hey card. The header is at least 68 CSS pixels high; the wordmark is 25 pixels on regular phone widths. Compact screens keep the preview ratio while reducing card width. Safe areas come from native Android insets. The activity card and fixed dock remain separate.
 
-Sage glass, a pearl preview, restrained shadows and press feedback retain the planned visual direction. Greeting transitions stop when Home is inactive, the Activity pauses, or reduced motion is requested. Low-memory devices use opaque glass without backdrop blur. Unregistered devices display a neutral status dot; green is reserved for ONLINE.
+Pale sage glass, dark green text, a pearl preview, restrained shadows and press feedback retain the planned visual direction. Dark text and brighter glass improve small-label contrast over the photograph. Landscape uses a vertical dock beside the content so it cannot cover the portrait preview. Greeting transitions stop when Home is inactive, the Activity pauses, or reduced motion is requested. Low-memory devices use opaque glass without backdrop blur. Unregistered devices display a neutral status dot; green is reserved for ONLINE.
 
 ## Wallpaper provenance and delivery
 
