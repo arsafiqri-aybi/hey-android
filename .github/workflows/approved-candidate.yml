@@ -5,10 +5,17 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: hey-approved-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   candidate:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [31, 35]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,12 +40,14 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Native screenshots and gesture acceptance
+        env:
+          HEY_API_LEVEL: ${{ matrix.api }}
         run: bash evaluation/start_ci_emulator.sh
       - name: Upload candidate and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hey-approved-candidate-evidence
+          name: hey-approved-candidate-evidence-api-${{ matrix.api }}
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/androidTest/debug/*.apk
