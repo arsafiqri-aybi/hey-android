@@ -452,6 +452,12 @@ public final class NativeAcceptance extends Instrumentation {
               activity.homeAction.setText(UiState.action(projection));
               activity.homeAction.setVisibility(
                   UiState.action(projection).isEmpty() ? View.GONE : View.VISIBLE);
+              activity.activity.setText(
+                  projection == UiState.Mode.READY
+                      ? "Tidak ada tugas aktif"
+                      : projection == UiState.Mode.WORKING
+                          ? "Tugas sedang berlangsung"
+                          : "Menunggu dilanjutkan");
             });
         capture("home-" + projection.name().toLowerCase() + "-projection-fixture");
       }

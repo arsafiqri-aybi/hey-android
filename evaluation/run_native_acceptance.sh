@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Run only on an isolated emulator. No credentials, pairing or production gateway.
-if ! adb shell getprop ro.kernel.qemu | tr -d '\r' | rg -q '^1$'; then
+if [ "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" != 1 ]; then
   echo 'BLOCKED: isolated emulator required'; exit 1
 fi
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -40,3 +40,10 @@ adb shell settings put system font_scale 1.0
 adb shell wm size 2340x1080
 adb shell wm density 440
 run_variant landscape
+adb shell wm size 1080x2340
+adb shell wm density 440
+adb shell settings put global animator_duration_scale 1.0
+adb shell cmd uimode night no
+run_variant system-light
+adb shell cmd uimode night yes
+run_variant system-dark
