@@ -11,7 +11,7 @@
     <meta-data android:name="firebase_analytics_collection_enabled" android:value="false"/>
     <activity android:name=".MainActivity" android:theme="@style/HeyStartingTheme" android:exported="true" android:launchMode="singleTop">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-      <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="hey" android:host="pair"/></intent-filter>
+      <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="hey" android:host="${pairHost}"/></intent-filter>
     </activity>
     <service android:name=".HeyService" android:exported="false" android:foregroundServiceType="specialUse|mediaProjection">
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Owner-authorized private browser tasks and live browser observation on an app-owned virtual display"/>

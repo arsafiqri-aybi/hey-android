@@ -1,11 +1,1 @@
-<resources><style name="HeyTheme" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#416A50</item><item name="android:windowLightStatusBar">true</item><item name="android:statusBarColor">#F3F2EF</item><item name="android:navigationBarColor">#F3F2EF</item><item name="android:windowLightNavigationBar">true</item><item name="android:windowActionModeOverlay">true</item></style>
-  <style name="HeyStartingTheme" parent="HeyTheme">
-    <item name="android:windowSplashScreenBackground">#000000</item>
-    <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
-    <item name="android:windowSplashScreenAnimationDuration">0</item>
-    <item name="android:statusBarColor">#000000</item>
-    <item name="android:navigationBarColor">#000000</item>
-    <item name="android:windowLightStatusBar">false</item>
-    <item name="android:windowLightNavigationBar">false</item>
-  </style>
-</resources>
+<resources><style name="HeyTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">@color/hey_working</item><item name="android:windowLightStatusBar">false</item><item name="android:windowLightNavigationBar">false</item><item name="android:statusBarColor">@color/hey_canvas</item><item name="android:navigationBarColor">@color/hey_canvas</item><item name="android:windowBackground">@color/hey_canvas</item><item name="android:windowActionModeOverlay">true</item></style><style name="HeyStartingTheme" parent="HeyTheme"><item name="android:windowSplashScreenBackground">@color/hey_ink</item><item name="android:windowSplashScreenAnimatedIcon">@drawable/hey_adaptive_foreground</item><item name="android:windowSplashScreenAnimationDuration">0</item><item name="android:statusBarColor">@color/hey_ink</item><item name="android:navigationBarColor">@color/hey_ink</item></style></resources>
