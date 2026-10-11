@@ -692,8 +692,9 @@ public final class NativeAcceptance extends Instrumentation {
       capture("tasks-running-projection-fixture");
       ui(
           () -> {
-            activity.expanded = "task";
-            activity.render();
+            View detail = find(activity.content, "Lihat detail tugas");
+            assertThat(detail != null && detail.performClick(), "Task detail handler unavailable");
+            assertThat(activity.expanded.equals("task"), "Task detail did not expand inline");
           });
       capture("tasks-running-detail-projection-fixture");
       ui(

@@ -118,6 +118,8 @@ final class TaskScreen {
                 + (active
                     ? "belum selesai"
                     : last.optBoolean("verified") ? "terverifikasi" : "belum terverifikasi");
+        if (!active && !last.optString("reason").isEmpty())
+          body += "\nReferensi receipt: " + last.optString("reason");
         if (p != null) {
           if (p.has("frames")) body += "\nFrame terekam: " + p.optInt("frames");
           if (p.has("audioChunks")) body += "\nSegmen audio: " + p.optInt("audioChunks");
@@ -193,7 +195,7 @@ final class TaskScreen {
       case "STALE_REFERENCE" -> "Halaman berubah. Hey perlu mengamati ulang sebelum melanjutkan.";
       case "NAVIGATION_TIMEOUT" -> "Halaman belum selesai dibuka dalam waktu yang tersedia.";
       case "TLS_ERROR" -> "Koneksi aman ke halaman tidak dapat diverifikasi.";
-      default -> "Pekerjaan terhenti. Penyebabnya belum dapat dipastikan.";
+      default -> "Pekerjaan terhenti. Periksa detail tugas sebelum melanjutkan.";
     };
   }
 
