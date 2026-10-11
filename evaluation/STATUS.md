@@ -1,3 +1,11 @@
+# Hey approved Graphite / Arc — 0.4.0-candidate, 2026-10-11
+
+Candidate implementation is isolated to `feat/hey-approved-graphite-arc-20261011` and draft PR #1. The four current owner-approved design locks in `docs/approved-20261011` supersede older visual specifications. Source, APK build, DOM fixtures, lint, native API 31/35 screenshots, adaptive gesture/scroll/session checks and baseline comparison are produced by `.github/workflows/approved-candidate.yml`; inspect the exact run/source commit linked in PR #1 for final results. `docs/APPROVED_IMPLEMENTATION_MATRIX.md` and `docs/HEY_TOKEN_USAGE.md` map the approved requirements to source.
+
+Debug candidate `id.ars.hey.preview` is separate from production `id.ars.hey`, with explicit `hey://pair-preview` links. No production signing key, merge, deployment, owner data reset or credential transfer was performed. Physical pairing/MCP tasks, OEM background/wake, audio consent, real concurrency, TalkBack and production update compatibility remain RETEST_REQUIRED. Synthetic visual states are confined to the separate test APK on an isolated unpaired emulator; they are not live connectivity evidence.
+
+The historical evidence below describes earlier code/branches and must not be read as current candidate results.
+
 # Hey Browser Engine vNext 0.3.0-dev — 2026-10-10 feature candidate
 
 Changes are isolated to `feat/hey-browser-engine-vnext-p0-p1-20261010`. Local Chromium browser fixture PASS; new Java regression tests are source-added but Android/JVM build unavailable here. Real Vivo takeover, nested swipe, screenshot masking/compositor, actionability, lifecycle and media/audio remain **RETEST REQUIRED**, not a release certification. No APK installed, no device/pairing touched, no deployment. See `docs/BROWSER_ENGINE_VNEXT_P0_P1.md`.

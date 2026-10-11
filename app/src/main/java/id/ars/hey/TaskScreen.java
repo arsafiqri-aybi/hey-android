@@ -87,13 +87,15 @@ final class TaskScreen {
                             ? last.optBoolean("verified")
                                 ? "Eksekusi tercatat dengan bukti yang sesuai."
                                 : "Eksekusi selesai. Bukti belum memastikan hasil akhirnya."
-                            : "Pekerjaan dihentikan: "
-                                + last.optString("reason", "Penyebab tidak tersedia"),
+                            : interruption(last.optString("reason")),
             14,
             a.ui.secondary,
             false));
     a.ui.gap(card, 18);
-    if (human) card.addView(a.ui.button("Buka browser", () -> a.select(1)));
+    if (human) {
+      card.addView(a.ui.button("Buka browser", () -> a.select(1)));
+      a.ui.gap(card, 8);
+    }
     if (exists) {
       Button expand =
           a.ui.button(
@@ -111,7 +113,7 @@ final class TaskScreen {
         JSONObject p = active ? s.optJSONObject("progress") : last.optJSONObject("evidence");
         String body =
             "Status: "
-                + (active ? "RUNNING" : last.optString("status"))
+                + statusLabel(active ? "RUNNING" : last.optString("status"))
                 + "\nHasil: "
                 + (active
                     ? "belum selesai"
@@ -119,7 +121,8 @@ final class TaskScreen {
         if (p != null) {
           if (p.has("frames")) body += "\nFrame terekam: " + p.optInt("frames");
           if (p.has("audioChunks")) body += "\nSegmen audio: " + p.optInt("audioChunks");
-          if (p.has("postcondition")) body += "\nBukti perubahan: " + p.optString("postcondition");
+          if (p.has("postcondition"))
+            body += "\nBukti perubahan: " + evidenceLabel(p.optString("postcondition"));
         }
         if (last.has("completedAt") && !active)
           body +=
@@ -149,7 +152,7 @@ final class TaskScreen {
         a.ui.gap(recent, 5);
         recent.addView(
             a.ui.text(
-                t.optString("status")
+                statusLabel(t.optString("status"))
                     + " · "
                     + (t.optBoolean("verified") ? "Terverifikasi" : "Belum terverifikasi"),
                 12,
@@ -166,5 +169,41 @@ final class TaskScreen {
           return true;
         });
     a.taskSignature = a.taskSignature();
+  }
+
+  private static String statusLabel(String status) {
+    return switch (status) {
+      case "RUNNING" -> "Sedang berlangsung";
+      case "DONE" -> "Selesai";
+      case "FAILED" -> "Terhenti";
+      case "CANCELLED" -> "Dibatalkan";
+      case "UNKNOWN" -> "Belum dipastikan";
+      case "QUEUED" -> "Dalam antrean";
+      case "WAITING_DEVICE" -> "Menunggu perangkat";
+      default -> "Status belum tersedia";
+    };
+  }
+
+  private static String interruption(String reason) {
+    return switch (reason) {
+      case "EXECUTION_ABORTED" -> "Eksekusi dihentikan sebelum selesai.";
+      case "OWNER_PAUSED" -> "Hey dijeda saat pekerjaan masih berlangsung.";
+      case "HUMAN_CONTROL_ACTIVE" -> "Kendali browser sedang berada di tanganmu.";
+      case "BROWSER_UNAVAILABLE" -> "Browser belum tersedia untuk melanjutkan pekerjaan.";
+      case "STALE_REFERENCE" -> "Halaman berubah. Hey perlu mengamati ulang sebelum melanjutkan.";
+      case "NAVIGATION_TIMEOUT" -> "Halaman belum selesai dibuka dalam waktu yang tersedia.";
+      case "TLS_ERROR" -> "Koneksi aman ke halaman tidak dapat diverifikasi.";
+      default -> "Pekerjaan terhenti. Penyebabnya belum dapat dipastikan.";
+    };
+  }
+
+  private static String evidenceLabel(String evidence) {
+    return switch (evidence) {
+      case "SCROLL_CHANGED" -> "Posisi halaman berubah";
+      case "VALUE_CHANGED" -> "Nilai isian berubah";
+      case "URL_CHANGED" -> "Alamat halaman berubah";
+      case "TAB_CHANGED" -> "Tab aktif berubah";
+      default -> evidence;
+    };
   }
 }
