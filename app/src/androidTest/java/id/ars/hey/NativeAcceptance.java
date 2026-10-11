@@ -142,12 +142,43 @@ public final class NativeAcceptance extends Instrumentation {
   private void capture(String name) throws Exception {
     foreground();
     SystemClock.sleep(250);
-    Bitmap shot = getUiAutomation().takeScreenshot();
+    Bitmap shot = null;
+    boolean nativePage = (int) field(activity, "page") != 1;
+    long deadline = SystemClock.elapsedRealtime() + 5000;
+    boolean composited = false;
+    do {
+      if (shot != null) shot.recycle();
+      shot = getUiAutomation().takeScreenshot();
+      assertThat(shot != null, "Screenshot unavailable");
+      if (!nativePage) {
+        composited = true;
+        break;
+      }
+      HeyShell shell = (HeyShell) field(activity, "shell");
+      int[] origin = new int[2];
+      ui(() -> shell.getLocationOnScreen(origin));
+      int x = origin[0] + shell.getPaddingLeft() + activity.dp(4);
+      int y = origin[1] + shell.getHeight() / 2;
+      int pixel =
+          shot.getPixel(Math.min(x, shot.getWidth() - 1), Math.min(y, shot.getHeight() - 1));
+      // Logical UI readiness does not prove the compositor has removed the launch transition.
+      composited =
+          Math.abs(android.graphics.Color.red(pixel) - 13) <= 1
+              && Math.abs(android.graphics.Color.green(pixel) - 16) <= 1
+              && Math.abs(android.graphics.Color.blue(pixel) - 20) <= 1;
+      if (!composited) SystemClock.sleep(150);
+    } while (!composited && SystemClock.elapsedRealtime() < deadline);
+    assertThat(composited, "Native compositor has not presented the approved canvas color");
+    if (nativePage)
+      record(
+          "native_render_stability",
+          "PASS",
+          "Native page snapshots wait for the composited approved canvas; early black/splash frames"
+              + " are rejected");
     File dir = new File(getTargetContext().getFilesDir(), "acceptance");
     dir.mkdirs();
     try (FileOutputStream out =
         new FileOutputStream(new File(dir, variant + "-" + name + ".png"))) {
-      assertThat(shot != null, "Screenshot unavailable");
       shot.compress(Bitmap.CompressFormat.PNG, 100, out);
     }
     shot.recycle();
