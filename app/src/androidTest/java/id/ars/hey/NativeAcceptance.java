@@ -281,6 +281,24 @@ public final class NativeAcceptance extends Instrumentation {
                 + " section; consent was not invoked");
       }
       record("native_pages", "PASS", "Home/Tasks/Settings captured with actual unpaired state");
+      ScrollView settingsScroll = (ScrollView) activity.content.getParent();
+      ui(() -> settingsScroll.fullScroll(View.FOCUS_DOWN));
+      waitForIdleSync();
+      capture("settings-footer");
+      ui(
+          () -> {
+            View footer = find(activity.content, "Hey by Ars");
+            android.graphics.Rect visible = new android.graphics.Rect();
+            assertThat(
+                footer != null && footer.getGlobalVisibleRect(visible),
+                "Settings footer cannot be reached in adaptive scroll content");
+            settingsScroll.scrollTo(0, 0);
+          });
+      record(
+          "settings_footer_reachable",
+          "PASS",
+          "Bottom Settings rows and Hey by Ars footer are reachable in native adaptive scrolling"
+              + " content");
       select(0);
       HeyShell shell = (HeyShell) field(activity, "shell");
       int[] xy = new int[2];
@@ -289,7 +307,7 @@ public final class NativeAcceptance extends Instrumentation {
           xy[1]
               + shell.getHeight()
               - shell.getPaddingBottom()
-              - 12 * activity.getResources().getDisplayMetrics().density;
+              - 36 * activity.getResources().getDisplayMetrics().density;
       float x = xy[0] + shell.getWidth() * .70f;
       foreground();
       StringBuilder touchTrace = new StringBuilder();
@@ -592,25 +610,51 @@ public final class NativeAcceptance extends Instrumentation {
               + " retest");
       // Runtime statuses are projection fixtures, not connectivity claims. No credential injection.
       select(0);
-      for (UiState.Mode projection :
-          new UiState.Mode[] {UiState.Mode.READY, UiState.Mode.WORKING, UiState.Mode.PAUSED}) {
+      Handler presentationHandler = (Handler) field(activity, "main");
+      Runnable presentationTick = (Runnable) field(activity, "surfaceTick");
+      ui(
+          () -> {
+            app.state.unlisten(activity);
+            presentationHandler.removeCallbacks(presentationTick);
+          });
+      waitForIdleSync();
+      try {
+        for (UiState.Mode projection :
+            new UiState.Mode[] {UiState.Mode.READY, UiState.Mode.WORKING, UiState.Mode.PAUSED}) {
+          ui(
+              () -> {
+                activity.heroTitle.setText(UiState.title(projection));
+                activity.heroDescription.setText(UiState.description(projection));
+                activity.homeStatus.setText("•  " + UiState.status(projection));
+                activity.homeStatus.setTextColor(activity.ui.accent(projection));
+                activity.homeAction.setText(UiState.action(projection));
+                activity.homeAction.setVisibility(
+                    UiState.action(projection).isEmpty() ? View.GONE : View.VISIBLE);
+                activity.activity.setText(
+                    projection == UiState.Mode.READY
+                        ? "Tidak ada tugas aktif"
+                        : projection == UiState.Mode.WORKING
+                            ? "Tugas sedang berlangsung"
+                            : "Menunggu dilanjutkan");
+              });
+          capture("home-" + projection.name().toLowerCase() + "-projection-fixture");
+          ui(
+              () ->
+                  assertThat(
+                      activity.heroTitle.getText().toString().equals(UiState.title(projection)),
+                      "Live state tick overwrote isolated visual projection"));
+        }
+        record(
+            "home_visual_projections",
+            "PASS",
+            "READY/WORKING/PAUSED native presentation fixtures captured with the live state ticker"
+                + " temporarily suspended; no credentials or real connectivity were inserted");
+      } finally {
         ui(
             () -> {
-              activity.heroTitle.setText(UiState.title(projection));
-              activity.heroDescription.setText(UiState.description(projection));
-              activity.homeStatus.setText("•  " + UiState.status(projection));
-              activity.homeStatus.setTextColor(activity.ui.accent(projection));
-              activity.homeAction.setText(UiState.action(projection));
-              activity.homeAction.setVisibility(
-                  UiState.action(projection).isEmpty() ? View.GONE : View.VISIBLE);
-              activity.activity.setText(
-                  projection == UiState.Mode.READY
-                      ? "Tidak ada tugas aktif"
-                      : projection == UiState.Mode.WORKING
-                          ? "Tugas sedang berlangsung"
-                          : "Menunggu dilanjutkan");
+              app.state.listen(activity);
+              presentationHandler.post(presentationTick);
             });
-        capture("home-" + projection.name().toLowerCase() + "-projection-fixture");
       }
       taskVisualFixtures();
       record(

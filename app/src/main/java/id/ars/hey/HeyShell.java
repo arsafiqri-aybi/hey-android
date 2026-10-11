@@ -77,14 +77,14 @@ final class HeyShell extends FrameLayout {
     if (a == MotionEvent.ACTION_DOWN) {
       int ticket = ++sequence;
       float x = e.getX(), y = e.getY();
+      // Keep a small ergonomic buffer above Android's home/quick-switch recognition area.
+      float safeBottom = getHeight() - getPaddingBottom() - ui.dp(24);
       boolean eligible =
           !ime
               && x > ui.dp(28)
               && x < getWidth() - ui.dp(28)
-              && y
-                  > getHeight()
-                      - getPaddingBottom()
-                      - ui.dp(arc.getVisibility() == VISIBLE ? 104 : 28);
+              && y < safeBottom
+              && y > safeBottom - ui.dp(arc.getVisibility() == VISIBLE ? 104 : 28);
       gesture.begin(x, y, eligible);
       siteAllows = probe == null;
       if (eligible && probe != null)

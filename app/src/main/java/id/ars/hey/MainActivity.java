@@ -102,7 +102,8 @@ public final class MainActivity extends Activity implements StateStore.Listener 
           Insets bars =
               insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
           Insets gestures = insets.getInsets(WindowInsets.Type.mandatorySystemGestures());
-          int bottom = Math.max(bars.bottom, gestures.bottom);
+          Insets systemGestures = insets.getInsets(WindowInsets.Type.systemGestures());
+          int bottom = Math.max(bars.bottom, Math.max(gestures.bottom, systemGestures.bottom));
           boolean ime = insets.isVisible(WindowInsets.Type.ime());
           if (ime) bottom = Math.max(bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
           v.setPadding(

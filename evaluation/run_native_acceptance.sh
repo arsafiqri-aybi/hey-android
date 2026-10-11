@@ -33,6 +33,8 @@ run_variant compact
 adb shell wm size 1200x2000
 adb shell wm density 320
 run_variant large
+adb shell wm size 1080x2340
+adb shell wm density 440
 adb shell settings put system font_scale 1.6
 adb shell settings put global animator_duration_scale 0
 run_variant large-font-reduced-motion
