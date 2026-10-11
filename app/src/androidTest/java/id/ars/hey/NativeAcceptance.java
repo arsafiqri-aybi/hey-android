@@ -1,5 +1,6 @@
 package id.ars.hey;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.*;
 import android.content.*;
 import android.graphics.Bitmap;
@@ -219,6 +220,10 @@ public final class NativeAcceptance extends Instrumentation {
   public void onStart() {
     Bundle status = new Bundle();
     try {
+      UiAutomation automation = getUiAutomation();
+      AccessibilityServiceInfo service = automation.getServiceInfo();
+      service.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+      automation.setServiceInfo(service);
       activity =
           (MainActivity)
               startActivitySync(
