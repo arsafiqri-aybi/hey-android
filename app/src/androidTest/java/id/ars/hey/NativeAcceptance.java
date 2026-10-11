@@ -369,7 +369,10 @@ public final class NativeAcceptance extends Instrumentation {
               + " id=carousel><div>Website carousel · One</div><div>Website carousel ·"
               + " Two</div></div><div id=long>Scrollable website content</div><footer>End of"
               + " fixture</footer>";
-      ui(() -> web.loadDataWithBaseURL("https://example.com/", html, "text/html", "UTF-8", null));
+      ui(
+          () ->
+              web.loadDataWithBaseURL(
+                  "https://example.com/", html, "text/html", "UTF-8", "https://example.com/"));
       SystemClock.sleep(1200);
       assertThat(
           js(web, "document.querySelector('#change').textContent").contains("Test interaction"),
@@ -480,18 +483,35 @@ public final class NativeAcceptance extends Instrumentation {
       ui(() -> shell.arc.show(1));
       capture("browser-fixture-arc");
       ui(() -> shell.arc.dismiss());
-      js(web, "history.pushState({},'', '#hey-history-fixture')");
-      SystemClock.sleep(250);
-      ui(() -> assertThat(fixture.humanBack(), "Native browser Back unavailable"));
-      SystemClock.sleep(500);
+      ui(
+          () ->
+              web.loadDataWithBaseURL(
+                  "https://example.com/hey-fixture/second",
+                  html.replace("A quiet browser.", "Second history page."),
+                  "text/html",
+                  "UTF-8",
+                  "https://example.com/hey-fixture/second"));
+      long historyDeadline = SystemClock.elapsedRealtime() + 5000;
+      while (!js(web, "document.querySelector('h1')?.textContent==='Second history page.'")
+              .equals("true")
+          && SystemClock.elapsedRealtime() < historyDeadline) SystemClock.sleep(100);
       assertThat(
-          js(web, "location.hash !== '#hey-history-fixture'").equals("true"),
-          "History did not return");
+          js(web, "document.querySelector('h1')?.textContent==='Second history page.'")
+              .equals("true"),
+          "Second history fixture missing");
+      ui(() -> assertThat(fixture.humanBack(), "Native browser Back unavailable"));
+      historyDeadline = SystemClock.elapsedRealtime() + 5000;
+      while (!js(web, "document.querySelector('h1')?.textContent==='A quiet browser.'")
+              .equals("true")
+          && SystemClock.elapsedRealtime() < historyDeadline) SystemClock.sleep(100);
+      assertThat(
+          js(web, "document.querySelector('h1')?.textContent==='A quiet browser.'").equals("true"),
+          "Native history did not return to first document");
       record(
           "native_history_back",
           "PASS",
-          "Real production humanBack returns same-document WebView history and invalidates old"
-              + " state");
+          "Production humanBack returns from second document to first WebView document using"
+              + " explicit HTTPS history URLs; old references invalidated");
       int cacheMode[] = {0};
       ui(
           () -> {
