@@ -148,7 +148,7 @@ final class SettingsScreen {
             detailColumn(
                 "Ukuran teks, area aman, keyboard, dan gerakan mengikuti Android. Animasi "
                     + (HeyUi.motion() ? "aktif" : "dikurangi oleh sistem")
-                    + ". Navigasi tersedia melalui swipe bawah, tekan lama kartu/kolom URL, aksi"
+                    + ". Navigasi tersedia melalui swipe bawah, tekan lama kartu native, aksi"
                     + " TalkBack, atau tombol Menu."));
     settingRow(
         application,

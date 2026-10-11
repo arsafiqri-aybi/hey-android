@@ -224,7 +224,8 @@ public final class MainActivity extends Activity implements StateStore.Listener 
       address.setSingleLine(true);
       address.setSelectAllOnFocus(true);
       address.setHint("Alamat atau pencarian");
-      address.setContentDescription("Alamat atau pencarian. Tekan lama untuk navigasi Hey.");
+      address.setContentDescription(
+          "Alamat atau pencarian. Navigasi halaman tersedia melalui aksi aksesibilitas.");
       address.setInputType(
           android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
       address.setImeOptions(EditorInfo.IME_ACTION_GO);
@@ -239,11 +240,6 @@ public final class MainActivity extends Activity implements StateStore.Listener 
               return true;
             }
             return false;
-          });
-      address.setOnLongClickListener(
-          v -> {
-            navigationMenu();
-            return true;
           });
       urlRegion.addView(address, new LinearLayout.LayoutParams(-1, -2));
       browserPage.addView(urlRegion, new LinearLayout.LayoutParams(-1, -2));
