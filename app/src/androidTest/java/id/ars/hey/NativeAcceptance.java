@@ -5,6 +5,7 @@ import android.content.*;
 import android.graphics.Bitmap;
 import android.os.*;
 import android.view.*;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.webkit.*;
 import android.widget.*;
 import java.io.*;
@@ -89,9 +90,56 @@ public final class NativeAcceptance extends Instrumentation {
 
   private void record(String name, String status, String observation) throws Exception {
     results.put(name, new JSONObject().put("status", status).put("observation", observation));
+    Bundle progress = new Bundle();
+    progress.putString("stream", name + ": " + status + "\n");
+    sendStatus(1, progress);
+  }
+
+  private void foreground() throws Exception {
+    for (int attempt = 0; attempt < 6; attempt++) {
+      AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+      if (root == null) {
+        SystemClock.sleep(200);
+        continue;
+      }
+      java.util.List<AccessibilityNodeInfo> errors =
+          root.findAccessibilityNodeInfosByText("isn't responding");
+      if (!errors.isEmpty()) {
+        String text = String.valueOf(errors.get(0).getText());
+        assertThat(
+            text.startsWith("Pixel Launcher") || text.startsWith("System UI"),
+            "Application ANR must fail acceptance: " + text);
+        java.util.List<AccessibilityNodeInfo> close =
+            root.findAccessibilityNodeInfosByText("Close app");
+        assertThat(
+            !close.isEmpty() && close.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            "Foreign system ANR could not be dismissed");
+        record(
+            "emulator_foreign_dialog",
+            "PASS",
+            "Dismissed foreign launcher/System UI ANR in isolated test VM; Hey ANR is never"
+                + " dismissed or accepted");
+        SystemClock.sleep(350);
+        continue;
+      }
+      if (!root.findAccessibilityNodeInfosByText("Viewing full screen").isEmpty()) {
+        java.util.List<AccessibilityNodeInfo> got = root.findAccessibilityNodeInfosByText("Got it");
+        assertThat(
+            !got.isEmpty() && got.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            "System fullscreen guide blocked application");
+        SystemClock.sleep(200);
+        continue;
+      }
+      assertThat(
+          getTargetContext().getPackageName().contentEquals(root.getPackageName()),
+          "Unexpected window blocks native acceptance: " + root.getPackageName());
+      return;
+    }
+    throw new AssertionError("Application foreground unavailable");
   }
 
   private void capture(String name) throws Exception {
+    foreground();
     SystemClock.sleep(250);
     Bitmap shot = getUiAutomation().takeScreenshot();
     File dir = new File(getTargetContext().getFilesDir(), "acceptance");
@@ -238,9 +286,24 @@ public final class NativeAcceptance extends Instrumentation {
               - shell.getPaddingBottom()
               - 12 * activity.getResources().getDisplayMetrics().density;
       float x = xy[0] + shell.getWidth() * .70f;
+      foreground();
       swipe(x, y, x - shell.arc.step() * .8f, y);
       assertThat((int) field(activity, "page") == 1, "Arc did not commit Browser");
+      waitForIdleSync();
       capture("browser-arc");
+      ui(
+          () -> {
+            android.graphics.Rect bounds = new android.graphics.Rect();
+            View url = (View) field(activity, "address");
+            assertThat(
+                url.getGlobalVisibleRect(bounds)
+                    && bounds.height() >= 48 * activity.getResources().getDisplayMetrics().density,
+                "Permanent URL field is not visible");
+          });
+      record(
+          "browser_url_layout",
+          "PASS",
+          "URL field has a visible 48dp minimum height above browser viewport on first navigation");
       ui(
           () -> {
             ViewGroup cards = shell.arc;
@@ -380,11 +443,20 @@ public final class NativeAcceptance extends Instrumentation {
           "PASS",
           "Native human DOWN changes AGENT to HUMAN before web dispatch; physical concurrency"
               + " remains a retest gate");
-      ui(
-          () -> {
-            web.scrollTo(0, 550);
-          });
-      assertThat(js(web, "scrollY>100").equals("true"), "Website did not scroll");
+      foreground();
+      int[] webPos = new int[2];
+      ui(() -> web.getLocationOnScreen(webPos));
+      swipe(
+          webPos[0] + web.getWidth() * .6f,
+          webPos[1] + web.getHeight() * .72f,
+          webPos[0] + web.getWidth() * .6f,
+          webPos[1] + web.getHeight() * .32f);
+      long scrollDeadline = SystemClock.elapsedRealtime() + 5000;
+      while (!js(web, "scrollY>100").equals("true")
+          && SystemClock.elapsedRealtime() < scrollDeadline) SystemClock.sleep(100);
+      assertThat(
+          js(web, "scrollY>100").equals("true"),
+          "Website did not scroll after real touchscreen gesture");
       capture("browser-scrolled");
       record(
           "native_web_scroll",

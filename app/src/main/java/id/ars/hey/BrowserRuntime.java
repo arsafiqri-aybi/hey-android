@@ -50,7 +50,7 @@ final class BrowserRuntime implements AutoCloseable {
     WebView.setWebContentsDebuggingEnabled(false);
     reader=ImageReader.newInstance(720,1280,PixelFormat.RGBA_8888,2);
     DisplayManager dm=context.getSystemService(DisplayManager.class);
-    display=dm.createVirtualDisplay("Hey Runtime",720,1280,240,reader.getSurface(),DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY|DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
+    display=dm.createVirtualDisplay("Hey Runtime",720,1280,context.getResources().getDisplayMetrics().densityDpi,reader.getSurface(),DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY|DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
     if(display==null)throw new IllegalStateException("PRIVATE_DISPLAY_UNAVAILABLE");
     presentation=new Presentation(context,display.getDisplay());container=new FrameLayout(presentation.getContext());presentation.setContentView(container);presentation.getWindow().setType(WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION);presentation.getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);presentation.show();
     reader.setOnImageAvailableListener(r->{try(Image image=r.acquireLatestImage()){if(image==null||!screenshotPending)return;screenshotPending=false;Image.Plane plane=image.getPlanes()[0];int width=image.getWidth(),height=image.getHeight(),padding=plane.getRowStride()/plane.getPixelStride()-width;Bitmap padded=Bitmap.createBitmap(width+padding,height,Bitmap.Config.ARGB_8888);padded.copyPixelsFromBuffer(plane.getBuffer());Bitmap next=Bitmap.createBitmap(padded,0,0,width,height);if(next!=padded)padded.recycle();if(frame!=null)frame.recycle();frame=next;frameAt=System.currentTimeMillis();}catch(Exception e){state.browser("CAPTURE_ERROR");}},main);

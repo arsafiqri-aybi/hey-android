@@ -246,7 +246,9 @@ public final class MainActivity extends Activity implements StateStore.Listener 
             return true;
           });
       urlRegion.addView(address, new LinearLayout.LayoutParams(-1, -2));
-      browserPage.addView(urlRegion);
+      browserPage.addView(urlRegion, new LinearLayout.LayoutParams(-1, -2));
+      browserPage.setFocusableInTouchMode(true);
+      browserPage.requestFocus();
       browserHost = new FrameLayout(this);
       browserHost.setContentDescription("Browser Hey");
       browserPage.addView(browserHost, new LinearLayout.LayoutParams(-1, 0, 1));
