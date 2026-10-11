@@ -292,7 +292,61 @@ public final class NativeAcceptance extends Instrumentation {
               - 12 * activity.getResources().getDisplayMetrics().density;
       float x = xy[0] + shell.getWidth() * .70f;
       foreground();
+      StringBuilder touchTrace = new StringBuilder();
+      Window.Callback original = activity.getWindow().getCallback();
+      ui(
+          () ->
+              activity
+                  .getWindow()
+                  .setCallback(
+                      (Window.Callback)
+                          Proxy.newProxyInstance(
+                              Window.Callback.class.getClassLoader(),
+                              new Class<?>[] {Window.Callback.class},
+                              (proxy, method, args) -> {
+                                if (method.getName().equals("dispatchTouchEvent")) {
+                                  MotionEvent event = (MotionEvent) args[0];
+                                  if (event.getActionMasked() != MotionEvent.ACTION_MOVE)
+                                    touchTrace
+                                        .append(event.getActionMasked())
+                                        .append('@')
+                                        .append(event.getX())
+                                        .append(',')
+                                        .append(event.getY())
+                                        .append(';');
+                                }
+                                return method.invoke(original, args);
+                              })));
       swipe(x, y, x - shell.arc.step() * .8f, y);
+      ui(() -> activity.getWindow().setCallback(original));
+      if ((int) field(activity, "page") != 1) {
+        record(
+            "arc_input_diagnostic",
+            "FAIL",
+            "shell="
+                + shell.getWidth()
+                + "x"
+                + shell.getHeight()
+                + " paddingBottom="
+                + shell.getPaddingBottom()
+                + " origin="
+                + xy[0]
+                + ","
+                + xy[1]
+                + " density="
+                + activity.getResources().getDisplayMetrics().density
+                + " expected="
+                + x
+                + ","
+                + y
+                + " step="
+                + shell.arc.step()
+                + " ime="
+                + field(shell, "ime")
+                + " delivered="
+                + touchTrace);
+        capture("arc-failure-diagnostic");
+      }
       assertThat((int) field(activity, "page") == 1, "Arc did not commit Browser");
       waitForIdleSync();
       capture("browser-arc");
